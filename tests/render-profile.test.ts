@@ -13,7 +13,10 @@ import {
 import { parseRenderProfile } from '../src/parser/react-profile.js';
 
 const fixturePath = resolve(import.meta.dirname, 'fixtures/sample-render-profile.json');
-const dataForRootsFixturePath = resolve(import.meta.dirname, 'fixtures/sample-render-profile-dataforroots.json');
+const dataForRootsFixturePath = resolve(
+  import.meta.dirname,
+  'fixtures/sample-render-profile-dataforroots.json',
+);
 
 describe('render profile parser', () => {
   it('parses a valid React DevTools profiler export', async () => {
@@ -50,7 +53,9 @@ describe('render profile analysis', () => {
 
     expect(summary.commitCount).toBe(3);
     expect(summary.topComponents[0].componentName).toBe('ProductList');
-    expect(summary.topComponents[0].totalActualDuration).toBeGreaterThanOrEqual(summary.topComponents[1].totalActualDuration);
+    expect(summary.topComponents[0].totalActualDuration).toBeGreaterThanOrEqual(
+      summary.topComponents[1].totalActualDuration,
+    );
     expect(summary.hotCommits[0].commitIndex).toBe(0);
     expect(summary.hotCommits[0].topComponents.length).toBeGreaterThan(0);
     expect(summary.hotCommits[0].topComponents[0].componentName).toBe('App');
@@ -64,9 +69,9 @@ describe('render profile analysis', () => {
     const slowComponents = getSlowComponents(profile, 2);
     const causes = getRerenderCauses(profile, 5);
 
-    expect(slowComponents.map(component => component.componentName)).toContain('ProductList');
+    expect(slowComponents.map((component) => component.componentName)).toContain('ProductList');
     expect(causes.length).toBeGreaterThan(0);
-    expect(causes.map(cause => cause.componentName)).toContain('SearchResults');
+    expect(causes.map((cause) => cause.componentName)).toContain('SearchResults');
     expect(causes[0].likelyCauses.length).toBeGreaterThan(0);
     expect(causes[0].evidence.length).toBeGreaterThan(0);
     expect(['low', 'medium', 'high']).toContain(causes[0].confidence);
@@ -86,94 +91,142 @@ describe('render profile analysis', () => {
   });
 
   it('compares two render profiles and reports regressions', () => {
-    const baseProfile = parseRenderProfile(JSON.stringify({
-      version: 5,
-      dataForRoots: [{
-        commitData: [
+    const baseProfile = parseRenderProfile(
+      JSON.stringify({
+        version: 5,
+        dataForRoots: [
           {
-            duration: 5,
-            fiberActualDurations: [[1, 5], [2, 2]],
-            fiberSelfDurations: [[1, 2], [2, 2]],
-            priorityLevel: 'Normal',
-            timestamp: 100,
+            commitData: [
+              {
+                duration: 5,
+                fiberActualDurations: [
+                  [1, 5],
+                  [2, 2],
+                ],
+                fiberSelfDurations: [
+                  [1, 2],
+                  [2, 2],
+                ],
+                priorityLevel: 'Normal',
+                timestamp: 100,
+              },
+            ],
+            displayName: 'App',
+            initialTreeBaseDurations: [
+              [1, 3],
+              [2, 2],
+            ],
+            rootID: 1,
+            snapshots: [
+              [1, { displayName: 'App', children: [2] }],
+              [2, { displayName: 'List', children: [] }],
+            ],
           },
         ],
-        displayName: 'App',
-        initialTreeBaseDurations: [[1, 3], [2, 2]],
-        rootID: 1,
-        snapshots: [
-          [1, { displayName: 'App', children: [2] }],
-          [2, { displayName: 'List', children: [] }],
-        ],
-      }],
-    }), 'base.json');
+      }),
+      'base.json',
+    );
 
-    const currentProfile = parseRenderProfile(JSON.stringify({
-      version: 5,
-      dataForRoots: [{
-        commitData: [
+    const currentProfile = parseRenderProfile(
+      JSON.stringify({
+        version: 5,
+        dataForRoots: [
           {
-            duration: 9,
-            fiberActualDurations: [[1, 9], [2, 6], [3, 4]],
-            fiberSelfDurations: [[1, 3], [2, 6], [3, 4]],
-            priorityLevel: 'Normal',
-            timestamp: 100,
+            commitData: [
+              {
+                duration: 9,
+                fiberActualDurations: [
+                  [1, 9],
+                  [2, 6],
+                  [3, 4],
+                ],
+                fiberSelfDurations: [
+                  [1, 3],
+                  [2, 6],
+                  [3, 4],
+                ],
+                priorityLevel: 'Normal',
+                timestamp: 100,
+              },
+            ],
+            displayName: 'App',
+            initialTreeBaseDurations: [
+              [1, 3],
+              [2, 2],
+              [3, 1],
+            ],
+            rootID: 1,
+            snapshots: [
+              [1, { displayName: 'App', children: [2, 3] }],
+              [2, { displayName: 'List', children: [] }],
+              [3, { displayName: 'FilterBar', children: [] }],
+            ],
           },
         ],
-        displayName: 'App',
-        initialTreeBaseDurations: [[1, 3], [2, 2], [3, 1]],
-        rootID: 1,
-        snapshots: [
-          [1, { displayName: 'App', children: [2, 3] }],
-          [2, { displayName: 'List', children: [] }],
-          [3, { displayName: 'FilterBar', children: [] }],
-        ],
-      }],
-    }), 'current.json');
+      }),
+      'current.json',
+    );
 
     const comparison = compareRenders(baseProfile, currentProfile, 10, 0);
 
-    expect(comparison.regressions.some(entry => entry.componentName === 'App')).toBe(true);
-    expect(comparison.regressions.some(entry => entry.componentName === 'List')).toBe(true);
-    expect(comparison.added.some(entry => entry.componentName === 'FilterBar')).toBe(true);
+    expect(comparison.regressions.some((entry) => entry.componentName === 'App')).toBe(true);
+    expect(comparison.regressions.some((entry) => entry.componentName === 'List')).toBe(true);
+    expect(comparison.added.some((entry) => entry.componentName === 'FilterBar')).toBe(true);
   });
 
   it('counts nested updates from commit updaters field', () => {
     const profileWithUpdaters = JSON.stringify({
       version: 5,
-      dataForRoots: [{
-        commitData: [
-          {
-            duration: 5,
-            fiberActualDurations: [[1, 5], [2, 3]],
-            fiberSelfDurations: [[1, 2], [2, 3]],
-            priorityLevel: 'Normal',
-            timestamp: 100,
-            updaters: null,
-          },
-          {
-            duration: 4,
-            fiberActualDurations: [[1, 4], [2, 2]],
-            fiberSelfDurations: [[1, 2], [2, 2]],
-            priorityLevel: 'Normal',
-            timestamp: 200,
-            updaters: [{ id: 2, displayName: 'Button', key: null, type: 5 }],
-          },
-        ],
-        displayName: 'App',
-        initialTreeBaseDurations: [[1, 3], [2, 2]],
-        rootID: 1,
-        snapshots: [
-          [1, { displayName: 'App', children: [2] }],
-          [2, { displayName: 'Button', children: [] }],
-        ],
-      }],
+      dataForRoots: [
+        {
+          commitData: [
+            {
+              duration: 5,
+              fiberActualDurations: [
+                [1, 5],
+                [2, 3],
+              ],
+              fiberSelfDurations: [
+                [1, 2],
+                [2, 3],
+              ],
+              priorityLevel: 'Normal',
+              timestamp: 100,
+              updaters: null,
+            },
+            {
+              duration: 4,
+              fiberActualDurations: [
+                [1, 4],
+                [2, 2],
+              ],
+              fiberSelfDurations: [
+                [1, 2],
+                [2, 2],
+              ],
+              priorityLevel: 'Normal',
+              timestamp: 200,
+              updaters: [{ id: 2, displayName: 'Button', key: null, type: 5 }],
+            },
+          ],
+          displayName: 'App',
+          initialTreeBaseDurations: [
+            [1, 3],
+            [2, 2],
+          ],
+          rootID: 1,
+          snapshots: [
+            [1, { displayName: 'App', children: [2] }],
+            [2, { displayName: 'Button', children: [] }],
+          ],
+        },
+      ],
     });
 
     const profile = parseRenderProfile(profileWithUpdaters, 'updaters-test.json');
-    const button = profile.components.find(c => c.componentName === 'Button');
+    const button = profile.components.find((c) => c.componentName === 'Button');
     expect(button?.nestedUpdateCount).toBe(1);
-    const app = profile.components.find(c => c.componentName === 'App');
+    const app = profile.components.find((c) => c.componentName === 'App');
     expect(app?.nestedUpdateCount).toBe(0);
     expect(profile.commits[1].updaterComponentNames).toContain('Button');
   });
@@ -184,8 +237,20 @@ describe('render profile analysis', () => {
       dataForRoots: [
         {
           commitData: [
-            { duration: 3, fiberActualDurations: [[1, 3]], fiberSelfDurations: [[1, 3]], priorityLevel: null, timestamp: 10 },
-            { duration: 4, fiberActualDurations: [[1, 4]], fiberSelfDurations: [[1, 4]], priorityLevel: null, timestamp: 20 },
+            {
+              duration: 3,
+              fiberActualDurations: [[1, 3]],
+              fiberSelfDurations: [[1, 3]],
+              priorityLevel: null,
+              timestamp: 10,
+            },
+            {
+              duration: 4,
+              fiberActualDurations: [[1, 4]],
+              fiberSelfDurations: [[1, 4]],
+              priorityLevel: null,
+              timestamp: 20,
+            },
           ],
           displayName: 'RootA',
           initialTreeBaseDurations: [],
@@ -194,7 +259,13 @@ describe('render profile analysis', () => {
         },
         {
           commitData: [
-            { duration: 5, fiberActualDurations: [[2, 5]], fiberSelfDurations: [[2, 5]], priorityLevel: null, timestamp: 30 },
+            {
+              duration: 5,
+              fiberActualDurations: [[2, 5]],
+              fiberSelfDurations: [[2, 5]],
+              priorityLevel: null,
+              timestamp: 30,
+            },
           ],
           displayName: 'RootB',
           initialTreeBaseDurations: [],
@@ -206,7 +277,7 @@ describe('render profile analysis', () => {
 
     const profile = parseRenderProfile(multiRootProfile, 'multi-root.json');
     expect(profile.commits).toHaveLength(3);
-    expect(profile.commits.map(c => c.index)).toEqual([0, 1, 2]);
+    expect(profile.commits.map((c) => c.index)).toEqual([0, 1, 2]);
   });
 
   it('filters components by minDuration in getRerenderCauses', async () => {
@@ -216,7 +287,7 @@ describe('render profile analysis', () => {
     const all = getRerenderCauses(profile, 10, 0);
     const filtered = getRerenderCauses(profile, 10, 50);
     expect(filtered.length).toBeLessThanOrEqual(all.length);
-    expect(filtered.every(c => c.totalActualDuration >= 50)).toBe(true);
+    expect(filtered.every((c) => c.totalActualDuration >= 50)).toBe(true);
   });
 
   it('sorts slow components by average duration when sortBy=average', async () => {
@@ -225,7 +296,9 @@ describe('render profile analysis', () => {
 
     const byAvg = getSlowComponents(profile, 10, 'average');
     for (let i = 1; i < byAvg.length; i++) {
-      expect(byAvg[i - 1].averageActualDuration).toBeGreaterThanOrEqual(byAvg[i].averageActualDuration);
+      expect(byAvg[i - 1].averageActualDuration).toBeGreaterThanOrEqual(
+        byAvg[i].averageActualDuration,
+      );
     }
   });
 });

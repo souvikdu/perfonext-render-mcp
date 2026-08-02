@@ -17,7 +17,7 @@ export function listRenderProfiles(): Array<{
   componentCount: number;
   totalCommitDuration: number;
 }> {
-  return Array.from(profiles.values()).map(profile => ({
+  return Array.from(profiles.values()).map((profile) => ({
     id: profile.id,
     filename: profile.filename,
     commitCount: profile.commits.length,

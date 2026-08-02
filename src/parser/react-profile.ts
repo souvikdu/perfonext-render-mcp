@@ -124,7 +124,9 @@ function buildFiberNodes(snapshots: unknown, rootId: number): FiberNode[] {
         : `(fiber:${fiberId})`,
     parentFiberId: parentMap.get(fiberId) ?? null,
     childFiberIds: Array.isArray(node.children)
-      ? node.children.filter((childId): childId is number => typeof childId === 'number' && nodeMap.has(childId))
+      ? node.children.filter(
+          (childId): childId is number => typeof childId === 'number' && nodeMap.has(childId),
+        )
       : [],
   }));
 }
@@ -166,11 +168,7 @@ function parseCommit(
   const selfDurationMap = new Map<number, number>();
   if (Array.isArray(raw.fiberSelfDurations)) {
     for (const entry of raw.fiberSelfDurations as unknown[]) {
-      if (
-        Array.isArray(entry) &&
-        typeof entry[0] === 'number' &&
-        typeof entry[1] === 'number'
-      ) {
+      if (Array.isArray(entry) && typeof entry[0] === 'number' && typeof entry[1] === 'number') {
         selfDurationMap.set(entry[0], entry[1]);
       }
     }
@@ -336,7 +334,14 @@ export function parseRenderProfile(content: string, filename: string): ParsedRen
     const startIndex = allCommits.length;
     for (let i = 0; i < commitDataArray.length; i++) {
       allCommits.push(
-        parseCommit(commitDataArray[i], startIndex + i, rootId, snapshotMap, initialFiberIDs, seenFiberIDs),
+        parseCommit(
+          commitDataArray[i],
+          startIndex + i,
+          rootId,
+          snapshotMap,
+          initialFiberIDs,
+          seenFiberIDs,
+        ),
       );
     }
   }

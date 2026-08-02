@@ -63,9 +63,9 @@ interface RawFiber {
   changeDescription?: {
     isFirstMount?: boolean;
     props?: string[] | null;
-    state?: boolean;       // boolean in real API, NOT an array
-    context?: boolean;     // boolean in real API, NOT an array
-    hooks?: number[];      // hook indices
+    state?: boolean; // boolean in real API, NOT an array
+    context?: boolean; // boolean in real API, NOT an array
+    hooks?: number[]; // hook indices
     parent?: boolean;
   } | null;
 }
@@ -74,19 +74,22 @@ function normalizeFiber(raw: RawFiber): ReactScanFiberEvent {
   const cd = raw.changeDescription ?? null;
   return {
     fiberId: typeof raw.fiberId === 'number' ? raw.fiberId : 0,
-    name: (typeof raw.name === 'string' && raw.name.trim()) ? raw.name.trim() : '(anonymous)',
+    name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : '(anonymous)',
     depth: typeof raw.depth === 'number' ? raw.depth : 0,
     actualDuration: typeof raw.actualDuration === 'number' ? raw.actualDuration : 0,
     selfDuration: typeof raw.selfBaseDuration === 'number' ? raw.selfBaseDuration : 0,
-    changeDescription: cd != null ? {
-      isFirstMount: cd.isFirstMount ?? false,
-      props: cd.props ?? null,
-      state: cd.state ? ['state'] : null,
-      context: cd.context ? ['context'] : null,
-      hooks: cd.hooks?.map((i: number) => `hook[${i}]`) ?? null,
-      parent: cd.parent ?? false,
-    } : null,
-    source: (raw.source && typeof raw.source === 'object') ? raw.source as ReactScanSource : null,
+    changeDescription:
+      cd != null
+        ? {
+            isFirstMount: cd.isFirstMount ?? false,
+            props: cd.props ?? null,
+            state: cd.state ? ['state'] : null,
+            context: cd.context ? ['context'] : null,
+            hooks: cd.hooks?.map((i: number) => `hook[${i}]`) ?? null,
+            parent: cd.parent ?? false,
+          }
+        : null,
+    source: raw.source && typeof raw.source === 'object' ? (raw.source as ReactScanSource) : null,
     parentId: null,
   };
 }
@@ -102,15 +105,16 @@ function parseOneEvent(
   // ── Native react-scan/lite endpoint format ────────────────────────────────
   // Body: { message: LiteEventKind, data: {...}, sessionId, timestamp }
   if (typeof r.message === 'string') {
-    const data = (r.data && typeof r.data === 'object') ? r.data as Record<string, unknown> : {};
+    const data = r.data && typeof r.data === 'object' ? (r.data as Record<string, unknown>) : {};
     const ts = typeof r.timestamp === 'number' ? r.timestamp : Date.now();
 
     if (r.message === 'commit') {
       const tree = Array.isArray(data.tree) ? (data.tree as RawFiber[]) : [];
       const fibers = tree.map(normalizeFiber);
       // Use root-depth fiber's actualDuration as commit duration; fall back to sum.
-      const rootFiber = fibers.find(f => f.depth === 0);
-      const duration = rootFiber?.actualDuration ?? fibers.reduce((s, f) => s + f.actualDuration, 0);
+      const rootFiber = fibers.find((f) => f.depth === 0);
+      const duration =
+        rootFiber?.actualDuration ?? fibers.reduce((s, f) => s + f.actualDuration, 0);
 
       return {
         kind: 'commit',
@@ -212,7 +216,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   }
 
   readBody(req)
-    .then(body => {
+    .then((body) => {
       let rawEvents: unknown[];
       try {
         const parsed: unknown = JSON.parse(body);
@@ -274,10 +278,12 @@ function startHttpServer(): Promise<number> {
     });
     server.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EADDRINUSE') {
-        reject(new Error(
-          `Ingest server port ${INGEST_PORT} is already in use. ` +
-          'Free the port or set PERFONEXT_INGEST_PORT to a different value.',
-        ));
+        reject(
+          new Error(
+            `Ingest server port ${INGEST_PORT} is already in use. ` +
+              'Free the port or set PERFONEXT_INGEST_PORT to a different value.',
+          ),
+        );
       } else {
         reject(err);
       }
