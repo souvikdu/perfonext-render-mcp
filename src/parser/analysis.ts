@@ -1,7 +1,6 @@
 import type {
   CommitBreakdown,
   CommitBreakdownComponentSummary,
-  ComponentSource,
   FiberNode,
   HotCommitComponentSummary,
   HotCommitSummary,
@@ -35,7 +34,7 @@ function getScoreBand(score: number): RerenderScoreBand {
 /** Returns true for React host (DOM/SVG) elements — first character is lowercase. */
 function isHostElement(name: string): boolean {
   const first = name.charCodeAt(0);
-  return first >= 97 /* a */ && first <= 122 /* z */;
+  return first >= 97 /* a */ && first <= 122; /* z */
 }
 
 /** Returns true for unnamed/anonymous components that can't be actionably diagnosed. */
@@ -77,15 +76,16 @@ function getMeasurementsTotalActualDuration(measurements: RenderMeasurement[]): 
 }
 
 function getFiberNodeMap(profile: ParsedRenderProfile, rootId?: number): Map<number, FiberNode> {
-  const nodes = rootId == null
-    ? profile.fiberNodes
-    : profile.fiberNodes.filter(node => node.rootId === rootId);
+  const nodes =
+    rootId == null
+      ? profile.fiberNodes
+      : profile.fiberNodes.filter((node) => node.rootId === rootId);
 
-  return new Map(nodes.map(node => [node.fiberId, node]));
+  return new Map(nodes.map((node) => [node.fiberId, node]));
 }
 
 function getMeasurementMap(commit: RenderCommit): Map<number, RenderMeasurement> {
-  return new Map(commit.measurements.map(measurement => [measurement.fiberId, measurement]));
+  return new Map(commit.measurements.map((measurement) => [measurement.fiberId, measurement]));
 }
 
 function getCommitTopComponents(commit: RenderCommit, limit: number): HotCommitComponentSummary[] {
@@ -108,19 +108,24 @@ function getCommitTopComponents(commit: RenderCommit, limit: number): HotCommitC
   }
 
   return Array.from(components.values())
-    .filter(component => !isHostElement(component.componentName) && !isAnonymousComponent(component.componentName))
+    .filter(
+      (component) =>
+        !isHostElement(component.componentName) && !isAnonymousComponent(component.componentName),
+    )
     .sort((left, right) => right.actualDuration - left.actualDuration)
     .slice(0, limit)
-    .map(component => ({
+    .map((component) => ({
       ...component,
-      shareOfCommitWork: totalActualDuration > 0
-        ? component.actualDuration / totalActualDuration
-        : 0,
+      shareOfCommitWork:
+        totalActualDuration > 0 ? component.actualDuration / totalActualDuration : 0,
     }));
 }
 
-function getCommitByIndex(profile: ParsedRenderProfile, commitIndex: number): RenderCommit | undefined {
-  return profile.commits.find(commit => commit.index === commitIndex);
+function getCommitByIndex(
+  profile: ParsedRenderProfile,
+  commitIndex: number,
+): RenderCommit | undefined {
+  return profile.commits.find((commit) => commit.index === commitIndex);
 }
 
 export function getHotCommits(
@@ -130,8 +135,8 @@ export function getHotCommits(
   priorityLevel?: string,
 ): HotCommitSummary[] {
   return profile.commits
-    .filter(commit => priorityLevel == null || commit.priorityLevel === priorityLevel)
-    .map(commit => ({
+    .filter((commit) => priorityLevel == null || commit.priorityLevel === priorityLevel)
+    .map((commit) => ({
       commitIndex: commit.index,
       rootId: commit.rootId,
       duration: commit.duration,
@@ -152,7 +157,10 @@ export function getHotCommits(
     .slice(0, limit);
 }
 
-export function getRenderSummary(profile: ParsedRenderProfile, limit = 10): {
+export function getRenderSummary(
+  profile: ParsedRenderProfile,
+  limit = 10,
+): {
   profileId: string;
   filename: string;
   version: string;
@@ -168,15 +176,15 @@ export function getRenderSummary(profile: ParsedRenderProfile, limit = 10): {
   dataQuality: 'heuristic' | 'exact';
 } {
   const anonymousNames = profile.components
-    .filter(c => isAnonymousComponent(c.componentName))
-    .map(c => c.componentName);
+    .filter((c) => isAnonymousComponent(c.componentName))
+    .map((c) => c.componentName);
   const uniqueAnonymous = [...new Set(anonymousNames)];
 
   const warnings: string[] = [];
   if (uniqueAnonymous.length > 0) {
     warnings.push(
       `${uniqueAnonymous.length} unnamed component${uniqueAnonymous.length > 1 ? 's' : ''} found (e.g. "Anonymous"). ` +
-      `These are excluded from analysis. Add a displayName or convert arrow functions to named function expressions to get actionable results.`,
+        `These are excluded from analysis. Add a displayName or convert arrow functions to named function expressions to get actionable results.`,
     );
   }
 
@@ -186,7 +194,7 @@ export function getRenderSummary(profile: ParsedRenderProfile, limit = 10): {
     version: profile.version,
     rendererId: profile.rendererId,
     commitCount: profile.commits.length,
-    componentCount: profile.components.filter(c => isAnalyzableComponent(c.componentName)).length,
+    componentCount: profile.components.filter((c) => isAnalyzableComponent(c.componentName)).length,
     totalCommitDuration: profile.totalCommitDuration,
     totalRenderDuration: profile.totalRenderDuration,
     hotCommits: getHotCommits(profile, Math.min(3, profile.commits.length), 3),
@@ -204,21 +212,21 @@ export function getSlowComponents(
   minDuration = 0,
 ): RenderSummaryEntry[] {
   const entries: RenderSummaryEntry[] = profile.components
-    .filter(component =>
-      !isHostElement(component.componentName) &&
-      !isAnonymousComponent(component.componentName) &&
-      component.totalActualDuration >= minDuration,
+    .filter(
+      (component) =>
+        !isHostElement(component.componentName) &&
+        !isAnonymousComponent(component.componentName) &&
+        component.totalActualDuration >= minDuration,
     )
-    .map(component => ({
+    .map((component) => ({
       componentName: component.componentName,
       renderCount: component.renderCount,
       mountCount: component.mountCount,
       updateCount: component.updateCount,
       nestedUpdateCount: component.nestedUpdateCount,
       totalActualDuration: component.totalActualDuration,
-      averageActualDuration: component.renderCount > 0
-        ? component.totalActualDuration / component.renderCount
-        : 0,
+      averageActualDuration:
+        component.renderCount > 0 ? component.totalActualDuration / component.renderCount : 0,
       maxActualDuration: component.maxActualDuration,
       commitCount: component.commitIndices.length,
       ...(component.source ? { source: component.source } : {}),
@@ -235,23 +243,28 @@ export function getSlowComponents(
   return entries.slice(0, limit);
 }
 
-export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minDuration = 0): RerenderCause[] {
+export function getRerenderCauses(
+  profile: ParsedRenderProfile,
+  limit = 10,
+  minDuration = 0,
+): RerenderCause[] {
   const causes = profile.components
-    .filter(component =>
-      !isHostElement(component.componentName) &&
-      !isAnonymousComponent(component.componentName) &&
-      (component.updateCount > 0 || component.nestedUpdateCount > 0) &&
-      component.totalActualDuration >= minDuration,
+    .filter(
+      (component) =>
+        !isHostElement(component.componentName) &&
+        !isAnonymousComponent(component.componentName) &&
+        (component.updateCount > 0 || component.nestedUpdateCount > 0) &&
+        component.totalActualDuration >= minDuration,
     )
-    .map(component => {
+    .map((component) => {
       const likelyCauses: string[] = [];
       const evidence: RerenderEvidence[] = [];
-      const selfToActualRatio = component.totalActualDuration > 0
-        ? component.totalSelfDuration / component.totalActualDuration
-        : 0;
-      const avgDuration = component.renderCount > 0
-        ? component.totalActualDuration / component.renderCount
-        : 0;
+      const selfToActualRatio =
+        component.totalActualDuration > 0
+          ? component.totalSelfDuration / component.totalActualDuration
+          : 0;
+      const avgDuration =
+        component.renderCount > 0 ? component.totalActualDuration / component.renderCount : 0;
 
       // ── Exact path: use changeDescription data when available ──────────────
       const cc = component.changeCauses;
@@ -262,12 +275,15 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
         if (cc.stateChanged) parts.push('state changed');
         if (cc.contextChanged) parts.push('context changed');
         if (cc.hooks.length > 0) parts.push(`hooks fired: ${cc.hooks.join(', ')}`);
-        if (cc.parentTriggered && parts.length === 0) parts.push('parent re-rendered (no own prop/state change)');
+        if (cc.parentTriggered && parts.length === 0)
+          parts.push('parent re-rendered (no own prop/state change)');
 
         if (parts.length > 0) {
           likelyCauses.push(
             `${component.componentName} re-rendered because: ${parts.join('; ')}.` +
-            (cc.parentTriggered && parts.length > 1 ? ' Also triggered by parent re-renders.' : ''),
+              (cc.parentTriggered && parts.length > 1
+                ? ' Also triggered by parent re-renders.'
+                : ''),
           );
           evidence.push({
             signal: 'exact-change-description',
@@ -279,9 +295,10 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
       }
 
       if (component.updateCount >= 2) {
-        const updatePct = component.renderCount > 0
-          ? Math.round((component.updateCount / component.renderCount) * 100)
-          : 0;
+        const updatePct =
+          component.renderCount > 0
+            ? Math.round((component.updateCount / component.renderCount) * 100)
+            : 0;
         const mountPct = 100 - updatePct;
 
         let causeText: string;
@@ -316,9 +333,9 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
       if (component.nestedUpdateCount > 0) {
         likelyCauses.push(
           `${component.nestedUpdateCount} of ${component.componentName}'s renders were triggered as nested updates ` +
-          `(the component itself was listed as an updater for its own commit). ` +
-          `This is a strong indicator of a render-then-setState loop, an effect with missing or incorrect dependencies, ` +
-          `or a context provider that updates its value during render.`,
+            `(the component itself was listed as an updater for its own commit). ` +
+            `This is a strong indicator of a render-then-setState loop, an effect with missing or incorrect dependencies, ` +
+            `or a context provider that updates its value during render.`,
         );
         evidence.push({
           signal: 'nested-update-propagation',
@@ -332,8 +349,8 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
         const selfPct = Math.round(selfToActualRatio * 100);
         likelyCauses.push(
           `${selfPct}% of ${component.componentName}'s render cost is self-contained (not delegated to children). ` +
-          `The component body itself is doing the heavy lifting — likely expensive JSX construction, inline computations, or heavy formatting on each render. ` +
-          `Wrapping with React.memo will prevent unnecessary calls, and moving expensive calculations into useMemo will avoid recomputing them when unrelated state changes.`,
+            `The component body itself is doing the heavy lifting — likely expensive JSX construction, inline computations, or heavy formatting on each render. ` +
+            `Wrapping with React.memo will prevent unnecessary calls, and moving expensive calculations into useMemo will avoid recomputing them when unrelated state changes.`,
         );
         evidence.push({
           signal: 'self-intensive-render',
@@ -344,13 +361,16 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
       }
 
       if (component.commitIndices.length >= 3) {
-        const commitList = component.commitIndices.slice(0, 5).join(', ') +
-          (component.commitIndices.length > 5 ? ` … (+${component.commitIndices.length - 5} more)` : '');
+        const commitList =
+          component.commitIndices.slice(0, 5).join(', ') +
+          (component.commitIndices.length > 5
+            ? ` … (+${component.commitIndices.length - 5} more)`
+            : '');
         likelyCauses.push(
           `${component.componentName} appeared in ${component.commitIndices.length} separate commits (commits ${commitList}), ` +
-          `which means rerender pressure on this component is sustained across the session rather than a one-off spike. ` +
-          `Likely causes are an unstable context value, a subscription or timer that triggers frequent state updates, ` +
-          `or a prop that carries a new reference on every parent render.`,
+            `which means rerender pressure on this component is sustained across the session rather than a one-off spike. ` +
+            `Likely causes are an unstable context value, a subscription or timer that triggers frequent state updates, ` +
+            `or a prop that carries a new reference on every parent render.`,
         );
         evidence.push({
           signal: 'wide-commit-spread',
@@ -363,9 +383,9 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
       if (likelyCauses.length === 0) {
         likelyCauses.push(
           `${component.componentName} rendered ${component.updateCount} time${component.updateCount === 1 ? '' : 's'} in update phase, ` +
-          `but the signals are below the thresholds for specific heuristics. ` +
-          `React Profiler exports do not include prop/state diffs, so the exact trigger cannot be determined from this data alone. ` +
-          `Use why-did-you-render or React DevTools to capture the specific prop or state change.`,
+            `but the signals are below the thresholds for specific heuristics. ` +
+            `React Profiler exports do not include prop/state diffs, so the exact trigger cannot be determined from this data alone. ` +
+            `Use why-did-you-render or React DevTools to capture the specific prop or state change.`,
         );
         evidence.push({
           signal: 'limited-export-evidence',
@@ -376,13 +396,23 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
       }
 
       // Score: update count (capped) + nested updates + commit spread + self-intensive + avg duration factor
-      const score = Math.min(10, Number((
-        Math.min(3, component.updateCount)
-        + Math.min(3, component.nestedUpdateCount * 1.5)
-        + (component.commitIndices.length >= 3 ? 2 : component.commitIndices.length >= 2 ? 1 : 0)
-        + (selfToActualRatio >= 0.9 ? 2 : selfToActualRatio >= 0.75 ? 1 : 0)
-        + Math.min(2, avgDuration / 10)  // up to +2 for components averaging ≥20ms per render
-      ).toFixed(1)));
+      const score = Math.min(
+        10,
+        Number(
+          (
+            Math.min(3, component.updateCount) +
+            Math.min(3, component.nestedUpdateCount * 1.5) +
+            (component.commitIndices.length >= 3
+              ? 2
+              : component.commitIndices.length >= 2
+                ? 1
+                : 0) +
+            (selfToActualRatio >= 0.9 ? 2 : selfToActualRatio >= 0.75 ? 1 : 0) +
+            Math.min(2, avgDuration / 10)
+          ) // up to +2 for components averaging ≥20ms per render
+            .toFixed(1),
+        ),
+      );
 
       const result: RerenderCause = {
         componentName: component.componentName,
@@ -393,7 +423,7 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
         score,
         scoreBand: getScoreBand(score),
         confidence: getConfidence(
-          evidence.filter(item => item.signal !== 'limited-export-evidence').length,
+          evidence.filter((item) => item.signal !== 'limited-export-evidence').length,
         ),
         evidence,
         likelyCauses,
@@ -455,11 +485,10 @@ export function getCommitBreakdown(
   const topComponents = Array.from(components.values())
     .sort((left, right) => right.actualDuration - left.actualDuration)
     .slice(0, componentLimit)
-    .map(component => ({
+    .map((component) => ({
       ...component,
-      shareOfCommitWork: totalActualDuration > 0
-        ? component.actualDuration / totalActualDuration
-        : 0,
+      shareOfCommitWork:
+        totalActualDuration > 0 ? component.actualDuration / totalActualDuration : 0,
     }));
 
   const topComponentShare = topComponents[0]?.shareOfCommitWork ?? 0;
@@ -469,11 +498,14 @@ export function getCommitBreakdown(
 
   let interpretation: string;
   if (topComponentShare >= 0.5) {
-    interpretation = 'This commit is dominated by one component, so investigate that component before the rest of the tree.';
+    interpretation =
+      'This commit is dominated by one component, so investigate that component before the rest of the tree.';
   } else if (topThreeShare >= 0.8) {
-    interpretation = 'This commit is concentrated in a small set of components, so the spike is likely localized to one subtree.';
+    interpretation =
+      'This commit is concentrated in a small set of components, so the spike is likely localized to one subtree.';
   } else {
-    interpretation = 'This commit spreads work across several components, which often points to broader parent-to-child rerender propagation.';
+    interpretation =
+      'This commit spreads work across several components, which often points to broader parent-to-child rerender propagation.';
   }
 
   return {
@@ -526,7 +558,7 @@ export function traceRenderPropagation(
   // ---------------------------------------------------------------------------
   const remainingBudget = new Map<number, number>();
   const sortedRendered = Array.from(renderedFiberIds)
-    .map(id => ({ id, m: measurementMap.get(id)! }))
+    .map((id) => ({ id, m: measurementMap.get(id)! }))
     .sort((a, b) => b.m.actualDuration - a.m.actualDuration);
 
   for (const { id, m } of sortedRendered) {
@@ -567,7 +599,10 @@ export function traceRenderPropagation(
     orphanParentMap.set(id, bestParentId);
 
     if (bestParentId !== null) {
-      remainingBudget.set(bestParentId, (remainingBudget.get(bestParentId) ?? 0) - m.actualDuration);
+      remainingBudget.set(
+        bestParentId,
+        (remainingBudget.get(bestParentId) ?? 0) - m.actualDuration,
+      );
       const siblings = orphanChildrenMap.get(bestParentId) ?? [];
       siblings.push(id);
       orphanChildrenMap.set(bestParentId, siblings);
@@ -575,7 +610,7 @@ export function traceRenderPropagation(
   }
 
   const entryFiberIds = Array.from(renderedFiberIds)
-    .filter(fiberId => {
+    .filter((fiberId) => {
       const node = fiberNodeMap.get(fiberId);
       if (node != null) {
         // Real snapshot node: entry if its parent did not render in this commit.
@@ -614,10 +649,11 @@ export function traceRenderPropagation(
 
     // Snapshot children that rendered + any orphans inferred to live under this fiber.
     const snapshotChildren = node
-      ? node.childFiberIds.filter(childId => renderedFiberIds.has(childId))
+      ? node.childFiberIds.filter((childId) => renderedFiberIds.has(childId))
       : [];
-    const orphanChildren = (orphanChildrenMap.get(fiberId) ?? [])
-      .filter(childId => renderedFiberIds.has(childId));
+    const orphanChildren = (orphanChildrenMap.get(fiberId) ?? []).filter((childId) =>
+      renderedFiberIds.has(childId),
+    );
     const renderedChildren = [...snapshotChildren, ...orphanChildren];
 
     if (renderedChildren.length === 0) {
@@ -629,7 +665,7 @@ export function traceRenderPropagation(
         depth: nextComponentPath.length,
         totalActualDuration: nextTotalActualDuration,
         leafActualDuration: measurement.actualDuration,
-        includesUpdater: nextComponentPath.some(name => updaterNames.has(name)),
+        includesUpdater: nextComponentPath.some((name) => updaterNames.has(name)),
       });
       return;
     }
@@ -656,9 +692,8 @@ export function traceRenderPropagation(
 
 export function detectRenderIssues(profile: ParsedRenderProfile, limit = 10): RenderIssue[] {
   const issues: RenderIssue[] = [];
-  const averageCommitDuration = profile.commits.length > 0
-    ? profile.totalCommitDuration / profile.commits.length
-    : 0;
+  const averageCommitDuration =
+    profile.commits.length > 0 ? profile.totalCommitDuration / profile.commits.length : 0;
 
   for (const cause of getRerenderCauses(profile, profile.components.length, 0)) {
     if (cause.scoreBand === 'low') {
@@ -695,8 +730,9 @@ export function detectRenderIssues(profile: ParsedRenderProfile, limit = 10): Re
       });
     }
 
-    const cascadingPath = traceRenderPropagation(profile, commit.commitIndex, 5)
-      .find(path => path.depth >= 3);
+    const cascadingPath = traceRenderPropagation(profile, commit.commitIndex, 5).find(
+      (path) => path.depth >= 3,
+    );
 
     if (cascadingPath) {
       issues.push({
@@ -724,7 +760,10 @@ export function detectRenderIssues(profile: ParsedRenderProfile, limit = 10): Re
         return severityDelta;
       }
 
-      return (left.commitIndex ?? Number.MAX_SAFE_INTEGER) - (right.commitIndex ?? Number.MAX_SAFE_INTEGER);
+      return (
+        (left.commitIndex ?? Number.MAX_SAFE_INTEGER) -
+        (right.commitIndex ?? Number.MAX_SAFE_INTEGER)
+      );
     })
     .slice(0, limit);
 }
@@ -736,12 +775,14 @@ function createDiffEntry(
 ): RenderDiffEntry {
   const baseTotalActualDuration = baseComponent?.totalActualDuration ?? 0;
   const currentTotalActualDuration = currentComponent?.totalActualDuration ?? 0;
-  const baseAverageActualDuration = baseComponent != null && baseComponent.renderCount > 0
-    ? baseComponent.totalActualDuration / baseComponent.renderCount
-    : 0;
-  const currentAverageActualDuration = currentComponent != null && currentComponent.renderCount > 0
-    ? currentComponent.totalActualDuration / currentComponent.renderCount
-    : 0;
+  const baseAverageActualDuration =
+    baseComponent != null && baseComponent.renderCount > 0
+      ? baseComponent.totalActualDuration / baseComponent.renderCount
+      : 0;
+  const currentAverageActualDuration =
+    currentComponent != null && currentComponent.renderCount > 0
+      ? currentComponent.totalActualDuration / currentComponent.renderCount
+      : 0;
   const totalActualDurationDelta = currentTotalActualDuration - baseTotalActualDuration;
 
   let changeType: RenderDiffEntry['changeType'];
@@ -762,14 +803,17 @@ function createDiffEntry(
     currentTotalActualDuration,
     totalActualDurationDelta,
     averageActualDurationDelta: currentAverageActualDuration - baseAverageActualDuration,
-    maxActualDurationDelta: (currentComponent?.maxActualDuration ?? 0) - (baseComponent?.maxActualDuration ?? 0),
+    maxActualDurationDelta:
+      (currentComponent?.maxActualDuration ?? 0) - (baseComponent?.maxActualDuration ?? 0),
     renderCountDelta: (currentComponent?.renderCount ?? 0) - (baseComponent?.renderCount ?? 0),
-    commitCountDelta: (currentComponent?.commitIndices.length ?? 0) - (baseComponent?.commitIndices.length ?? 0),
-    percentChange: baseTotalActualDuration > 0
-      ? (totalActualDurationDelta / baseTotalActualDuration) * 100
-      : currentTotalActualDuration > 0
-        ? 100
-        : null,
+    commitCountDelta:
+      (currentComponent?.commitIndices.length ?? 0) - (baseComponent?.commitIndices.length ?? 0),
+    percentChange:
+      baseTotalActualDuration > 0
+        ? (totalActualDurationDelta / baseTotalActualDuration) * 100
+        : currentTotalActualDuration > 0
+          ? 100
+          : null,
   };
 }
 
@@ -779,28 +823,48 @@ export function compareRenders(
   limit = 10,
   minDelta = 0,
 ): RenderComparison {
-  const baseComponents = new Map(baseProfile.components.map(component => [component.componentName, component]));
-  const currentComponents = new Map(currentProfile.components.map(component => [component.componentName, component]));
+  const baseComponents = new Map(
+    baseProfile.components.map((component) => [component.componentName, component]),
+  );
+  const currentComponents = new Map(
+    currentProfile.components.map((component) => [component.componentName, component]),
+  );
   const allComponentNames = new Set([...baseComponents.keys(), ...currentComponents.keys()]);
 
   const entries = Array.from(allComponentNames)
-    .map(componentName => createDiffEntry(componentName, baseComponents.get(componentName), currentComponents.get(componentName)))
-    .filter(entry => {
+    .map((componentName) =>
+      createDiffEntry(
+        componentName,
+        baseComponents.get(componentName),
+        currentComponents.get(componentName),
+      ),
+    )
+    .filter((entry) => {
       if (entry.changeType === 'added' || entry.changeType === 'removed') {
         return true;
       }
 
-      return Math.abs(entry.totalActualDurationDelta) > 0 && Math.abs(entry.totalActualDurationDelta) >= minDelta;
+      return (
+        Math.abs(entry.totalActualDurationDelta) > 0 &&
+        Math.abs(entry.totalActualDurationDelta) >= minDelta
+      );
     })
-    .sort((left, right) => Math.abs(right.totalActualDurationDelta) - Math.abs(left.totalActualDurationDelta))
+    .sort(
+      (left, right) =>
+        Math.abs(right.totalActualDurationDelta) - Math.abs(left.totalActualDurationDelta),
+    )
     .slice(0, limit);
 
   return {
     baseProfileId: baseProfile.id,
     currentProfileId: currentProfile.id,
-    regressions: entries.filter(entry => entry.changeType === 'regression' && entry.totalActualDurationDelta > 0),
-    improvements: entries.filter(entry => entry.changeType === 'improvement' && entry.totalActualDurationDelta < 0),
-    added: entries.filter(entry => entry.changeType === 'added'),
-    removed: entries.filter(entry => entry.changeType === 'removed'),
+    regressions: entries.filter(
+      (entry) => entry.changeType === 'regression' && entry.totalActualDurationDelta > 0,
+    ),
+    improvements: entries.filter(
+      (entry) => entry.changeType === 'improvement' && entry.totalActualDurationDelta < 0,
+    ),
+    added: entries.filter((entry) => entry.changeType === 'added'),
+    removed: entries.filter((entry) => entry.changeType === 'removed'),
   };
 }

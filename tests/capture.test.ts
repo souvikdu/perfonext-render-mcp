@@ -46,14 +46,16 @@ interface NativeCommitBody {
   };
 }
 
-function makeCommit(overrides: Partial<{
-  sessionId: string;
-  commitIndex: number;
-  timestamp: number;
-  rendererId: number;
-  priorityName: string;
-  tree: NativeTree[];
-}> = {}): NativeCommitBody {
+function makeCommit(
+  overrides: Partial<{
+    sessionId: string;
+    commitIndex: number;
+    timestamp: number;
+    rendererId: number;
+    priorityName: string;
+    tree: NativeTree[];
+  }> = {},
+): NativeCommitBody {
   return {
     message: 'commit',
     sessionId: overrides.sessionId ?? 'test-session',
@@ -72,7 +74,14 @@ function makeCommit(overrides: Partial<{
           actualStartTime: 100,
           selfBaseDuration: 3,
           treeBaseDuration: 8,
-          changeDescription: { isFirstMount: false, props: ['onClick'], state: false, context: false, hooks: [], parent: false },
+          changeDescription: {
+            isFirstMount: false,
+            props: ['onClick'],
+            state: false,
+            context: false,
+            hooks: [],
+            parent: false,
+          },
           source: { fileName: 'src/Button.tsx', lineNumber: 10, columnNumber: 5 },
           ownerName: null,
         },
@@ -85,7 +94,14 @@ function makeCommit(overrides: Partial<{
           actualStartTime: 105,
           selfBaseDuration: 5,
           treeBaseDuration: 5,
-          changeDescription: { isFirstMount: true, props: null, state: false, context: false, hooks: [], parent: false },
+          changeDescription: {
+            isFirstMount: true,
+            props: null,
+            state: false,
+            context: false,
+            hooks: [],
+            parent: false,
+          },
           source: null,
           ownerName: 'Button',
         },
@@ -94,10 +110,7 @@ function makeCommit(overrides: Partial<{
   };
 }
 
-async function postEvents(
-  sessionId: string,
-  events: NativeCommitBody[],
-): Promise<Response> {
+async function postEvents(sessionId: string, events: NativeCommitBody[]): Promise<Response> {
   const port = getServerPort();
   return fetch(`http://127.0.0.1:${port}/ingest/${sessionId}`, {
     method: 'POST',
@@ -152,16 +165,16 @@ describe('ingest server — HTTP endpoint', () => {
     const res = await postEvents(session.sessionId, [commit]);
     expect(res.status).toBe(200);
 
-    const body = await res.json() as { ok: boolean; received: number };
+    const body = (await res.json()) as { ok: boolean; received: number };
     expect(body.ok).toBe(true);
     expect(body.received).toBe(1);
     expect(session.commits).toHaveLength(1);
     // Verify normalization: selfBaseDuration → selfDuration, state boolean → ['state']
     const stored = session.commits[0];
     expect(stored.fibers).toHaveLength(2);
-    expect(stored.fibers[0].selfDuration).toBe(3);  // from selfBaseDuration
+    expect(stored.fibers[0].selfDuration).toBe(3); // from selfBaseDuration
     expect(stored.fibers[0].changeDescription?.isFirstMount).toBe(false);
-    expect(stored.duration).toBe(8);  // root fiber (depth=0) actualDuration
+    expect(stored.duration).toBe(8); // root fiber (depth=0) actualDuration
   });
 
   it('accepts a native profiling-hooks-status event and updates profilingAvailable', async () => {
@@ -172,7 +185,12 @@ describe('ingest server — HTTP endpoint', () => {
     const res = await fetch(`http://127.0.0.1:${port}/ingest/${session.sessionId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'profiling-hooks-status', sessionId: session.sessionId, timestamp: Date.now(), data: { available: false } }),
+      body: JSON.stringify({
+        message: 'profiling-hooks-status',
+        sessionId: session.sessionId,
+        timestamp: Date.now(),
+        data: { available: false },
+      }),
     });
     expect(res.status).toBe(200);
     expect(session.profilingAvailable).toBe(false);
@@ -187,7 +205,7 @@ describe('ingest server — HTTP endpoint', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'profiling-hooks-status', available: true }),
     });
-    const body = await res.json() as { ok: boolean; received: number };
+    const body = (await res.json()) as { ok: boolean; received: number };
     expect(res.status).toBe(200);
     expect(body.received).toBe(0);
     expect(session.commits).toHaveLength(0);
@@ -255,7 +273,9 @@ describe('ingest server — HTTP endpoint', () => {
 // react-scan-lite adapter — tested through the full HTTP → session → adapt path
 // ---------------------------------------------------------------------------
 
-async function captureAndAdapt(bodies: NativeCommitBody[]): Promise<ReturnType<typeof adaptReactScanEvents>> {
+async function captureAndAdapt(
+  bodies: NativeCommitBody[],
+): Promise<ReturnType<typeof adaptReactScanEvents>> {
   const session = await createCaptureSession();
   const port = getServerPort();
   await fetch(`http://127.0.0.1:${port}/ingest/${session.sessionId}`, {
@@ -304,7 +324,7 @@ describe('adaptReactScanEvents', () => {
       makeCommit(),
       makeCommit(), // same fiberIds 1 and 2
     ]);
-    const ids = profile.fiberNodes.map(f => f.fiberId);
+    const ids = profile.fiberNodes.map((f) => f.fiberId);
     expect(ids).toHaveLength(new Set(ids).size);
     expect(ids).toHaveLength(2);
   });
@@ -312,7 +332,7 @@ describe('adaptReactScanEvents', () => {
   it('builds component stats aggregated across commits', async () => {
     const profile = await captureAndAdapt([makeCommit(), makeCommit()]);
 
-    const button = profile.components.find(c => c.componentName === 'Button');
+    const button = profile.components.find((c) => c.componentName === 'Button');
     expect(button).toBeDefined();
     expect(button!.renderCount).toBe(2);
     expect(button!.totalActualDuration).toBeCloseTo(16);
@@ -339,22 +359,24 @@ describe('adaptReactScanEvents', () => {
         timestamp: 1000,
         data: {
           rendererId: 1,
-          tree: [{
-            fiberId: 10,
-            name: 'Counter',
-            depth: 0,
-            actualDuration: 4,
-            selfBaseDuration: 4,
-            changeDescription: {
-              isFirstMount: false,
-              props: null,
-              state: true,       // boolean in real API
-              context: false,
-              hooks: [0, 2],     // indices in real API
-              parent: false,
+          tree: [
+            {
+              fiberId: 10,
+              name: 'Counter',
+              depth: 0,
+              actualDuration: 4,
+              selfBaseDuration: 4,
+              changeDescription: {
+                isFirstMount: false,
+                props: null,
+                state: true, // boolean in real API
+                context: false,
+                hooks: [0, 2], // indices in real API
+                parent: false,
+              },
+              source: null,
             },
-            source: null,
-          }],
+          ],
         },
       }),
     });
@@ -362,10 +384,10 @@ describe('adaptReactScanEvents', () => {
     // Assert on the normalized session commit — state:true → ['state'], hooks:[0,2] → ['hook[0]','hook[2]']
     const fiber = session.commits[0].fibers[0];
     expect(fiber.name).toBe('Counter');
-    expect(fiber.selfDuration).toBe(4);                          // selfBaseDuration → selfDuration
-    expect(fiber.changeDescription?.state).toEqual(['state']);   // true → ['state']
+    expect(fiber.selfDuration).toBe(4); // selfBaseDuration → selfDuration
+    expect(fiber.changeDescription?.state).toEqual(['state']); // true → ['state']
     expect(fiber.changeDescription?.hooks).toEqual(['hook[0]', 'hook[2]']); // indices → names
-    expect(fiber.changeDescription?.context).toBeNull();        // false → null
+    expect(fiber.changeDescription?.context).toBeNull(); // false → null
     expect(fiber.changeDescription?.props).toBeNull();
   });
 });

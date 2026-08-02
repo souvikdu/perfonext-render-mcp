@@ -21,7 +21,7 @@ function buildMeasurements(
   commitIndex: number,
   commitTime: number,
 ): RenderMeasurement[] {
-  return fibers.map(fiber => ({
+  return fibers.map((fiber) => ({
     fiberId: fiber.fiberId,
     rootId,
     componentName: fiber.name?.trim() || `(fiber:${fiber.fiberId})`,
@@ -38,7 +38,7 @@ function buildMeasurements(
 
 function buildFiberNodes(fibers: ReactScanFiberEvent[], rootId: number): FiberNode[] {
   // Wire format has no explicit parent IDs; parentFiberId and childFiberIds are always null/empty.
-  return fibers.map(fiber => ({
+  return fibers.map((fiber) => ({
     fiberId: fiber.fiberId,
     rootId,
     componentName: fiber.name?.trim() || `(fiber:${fiber.fiberId})`,
@@ -107,12 +107,7 @@ export function adaptReactScanEvents(
     duration: raw.duration ?? 0,
     timestamp: raw.timestamp ?? 0,
     priorityLevel: raw.priorityName ?? null,
-    measurements: buildMeasurements(
-      raw.fibers ?? [],
-      raw.rootId ?? 1,
-      idx,
-      raw.timestamp ?? 0,
-    ),
+    measurements: buildMeasurements(raw.fibers ?? [], raw.rootId ?? 1, idx, raw.timestamp ?? 0),
     updaterComponentNames: raw.updaterNames ?? [],
   }));
 
@@ -133,13 +128,16 @@ export function adaptReactScanEvents(
 
   // Single pass over raw fibers to collect source, changeCauses, and hasChangeDescriptions.
   const sourceMap = new Map<string, ComponentSource>();
-  const changeCausesMap = new Map<string, {
-    props: Set<string>;
-    stateChanged: boolean;
-    contextChanged: boolean;
-    hooks: Set<string>;
-    parentTriggered: boolean;
-  }>();
+  const changeCausesMap = new Map<
+    string,
+    {
+      props: Set<string>;
+      stateChanged: boolean;
+      contextChanged: boolean;
+      hooks: Set<string>;
+      parentTriggered: boolean;
+    }
+  >();
   let hasChangeDescriptions = false;
 
   for (const raw of rawCommits) {
@@ -169,7 +167,13 @@ export function adaptReactScanEvents(
       // Aggregate per-component causes (even parent-only renders are tracked).
       let causes = changeCausesMap.get(name);
       if (!causes) {
-        causes = { props: new Set(), stateChanged: false, contextChanged: false, hooks: new Set(), parentTriggered: false };
+        causes = {
+          props: new Set(),
+          stateChanged: false,
+          contextChanged: false,
+          hooks: new Set(),
+          parentTriggered: false,
+        };
         changeCausesMap.set(name, causes);
       }
       for (const p of cd.props ?? []) causes.props.add(p);
@@ -185,7 +189,14 @@ export function adaptReactScanEvents(
     if (src) component.source = src;
 
     const raw = changeCausesMap.get(component.componentName);
-    if (raw && (raw.props.size > 0 || raw.stateChanged || raw.contextChanged || raw.hooks.size > 0 || raw.parentTriggered)) {
+    if (
+      raw &&
+      (raw.props.size > 0 ||
+        raw.stateChanged ||
+        raw.contextChanged ||
+        raw.hooks.size > 0 ||
+        raw.parentTriggered)
+    ) {
       const changeCauses: ChangeCauses = {
         props: Array.from(raw.props),
         stateChanged: raw.stateChanged,

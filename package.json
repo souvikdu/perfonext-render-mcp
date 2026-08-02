@@ -1,6 +1,6 @@
 {
   "name": "@perfonext/render-mcp",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "MCP server for analyzing Next.js React Profiler exports: render summaries, rerender causes, hot commits, and profile diffing",
   "type": "module",
   "main": "dist/index.js",
@@ -19,9 +19,13 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc && chmod +x dist/index.js",
+    "build": "tsc && shx chmod +x dist/index.js",
     "dev": "tsc --watch",
     "test": "vitest run",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
     "prepublishOnly": "npm run build"
   },
@@ -37,20 +41,28 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/souvikxcoder/perfonext-render-mcp.git"
+    "url": "git+https://github.com/souvikdu/perfonext-render-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/souvikxcoder/perfonext-render-mcp/issues"
+    "url": "https://github.com/souvikdu/perfonext-render-mcp/issues"
   },
-  "homepage": "https://github.com/souvikxcoder/perfonext-render-mcp#readme",
+  "homepage": "https://github.com/souvikdu/perfonext-render-mcp#readme",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@perfonext/build-mcp": "file:../perfonext-build-mcp",
     "zod": "^4.4.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.17.0",
     "@types/node": "^25.6.0",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^10.0.1",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "shx": "^0.4.0",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.18.2",
     "vitest": "^3.2.4"
   }
 }
