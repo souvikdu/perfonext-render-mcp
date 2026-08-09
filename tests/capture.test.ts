@@ -5,6 +5,7 @@ import {
   getCaptureSession,
   getServerPort,
   stopCaptureSession,
+  stopIngestServer,
 } from '../src/ingest/server.js';
 import { adaptReactScanEvents } from '../src/parser/react-scan-lite.js';
 
@@ -151,6 +152,19 @@ describe('ingest server — session lifecycle', () => {
   it('getCaptureSession returns undefined for unknown session', () => {
     expect(getCaptureSession('does-not-exist')).toBeUndefined();
   });
+
+  it('binds to an OS-assigned ephemeral port, not the default 7721', async () => {
+    await createCaptureSession();
+    const port = getServerPort();
+    expect(port).toBeGreaterThan(0);
+    expect(port).not.toBe(7721);
+  });
+
+  it('handles concurrent createCaptureSession calls without EADDRINUSE', async () => {
+    const [a, b] = await Promise.all([createCaptureSession(), createCaptureSession()]);
+    expect(a.status).toBe('active');
+    expect(b.status).toBe('active');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -257,15 +271,55 @@ describe('ingest server — HTTP endpoint', () => {
     expect(res.status).toBe(400);
   });
 
-  it('handles CORS preflight with 204', async () => {
+  it('returns 413 when the request body exceeds the size cap', async () => {
+    const session = await createCaptureSession();
+    const port = getServerPort();
+
+    const oversized = 'x'.repeat(21 * 1024 * 1024); // over the 20MB cap
+    const res = await fetch(`http://127.0.0.1:${port}/ingest/${session.sessionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: oversized,
+    });
+    expect(res.status).toBe(413);
+  });
+
+  it('returns 400 for a malformed percent-encoded session id', async () => {
+    await createCaptureSession();
+    const port = getServerPort();
+
+    const res = await fetch(`http://127.0.0.1:${port}/ingest/%E0%A4%A`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '[]',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('handles CORS preflight with 204 and echoes a localhost origin', async () => {
     await createCaptureSession();
     const port = getServerPort();
 
     const res = await fetch(`http://127.0.0.1:${port}/ingest/any`, {
       method: 'OPTIONS',
+      headers: { Origin: 'http://localhost:3000' },
     });
     expect(res.status).toBe(204);
-    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+    expect(res.headers.get('vary')).toBe('Origin');
+  });
+
+  it('omits Access-Control-Allow-Origin for a non-localhost origin', async () => {
+    await createCaptureSession();
+    const port = getServerPort();
+
+    const res = await fetch(`http://127.0.0.1:${port}/ingest/any`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://evil.example' },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+    expect(res.headers.get('vary')).toBeNull();
   });
 });
 
@@ -392,7 +446,6 @@ describe('adaptReactScanEvents', () => {
   });
 });
 
-afterAll(() => {
-  // Nothing to tear down — the HTTP server is a singleton and vitest will
-  // exit the process cleanly.
+afterAll(async () => {
+  await stopIngestServer();
 });
