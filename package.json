@@ -50,7 +50,6 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@perfonext/build-mcp": "file:../perfonext-build-mcp",
     "zod": "^4.4.1"
   },
   "devDependencies": {

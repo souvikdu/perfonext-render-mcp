@@ -172,103 +172,175 @@ let serverPort: number | null = null;
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+// Caps memory use for a single POST — a render-storm capture can otherwise buffer
+// an unbounded stream of events from a runaway page.
+const MAX_BODY_BYTES = 20 * 1024 * 1024;
+
+class PayloadTooLargeError extends Error {}
+
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    let total = 0;
+
+    const onData = (chunk: Buffer): void => {
+      total += chunk.length;
+      if (total > MAX_BODY_BYTES) {
+        // Don't destroy the socket — that resets the connection before the 413
+        // response can flush. Stop listening and drain the rest of the body instead.
+        req.off('data', onData);
+        req.resume();
+        reject(new PayloadTooLargeError('request body exceeds size limit'));
+        return;
+      }
+      chunks.push(chunk);
+    };
+
+    req.on('data', onData);
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
     req.on('error', reject);
   });
 }
 
+/** Echoes the request Origin only for localhost/127.0.0.1 — this endpoint should
+ *  only ever be called by the instrumented app itself, not an arbitrary open tab. */
+function corsOrigin(req: IncomingMessage): string | null {
+  const origin = req.headers.origin;
+  if (!origin) return null;
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === 'localhost' || hostname === '127.0.0.1' ? origin : null;
+  } catch {
+    return null;
+  }
+}
+
 function handleRequest(req: IncomingMessage, res: ServerResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  try {
+    const allowedOrigin = corsOrigin(req);
+    if (allowedOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+      // The ACAO value varies per request (echoed origin) — tell caches not to reuse it.
+      res.setHeader('Vary', 'Origin');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
 
-  const url = req.url ?? '';
-  const match = url.match(/^\/ingest\/([^/]+)$/);
-  if (!match || req.method !== 'POST') {
-    res.writeHead(404);
-    res.end(JSON.stringify({ error: 'not found' }));
-    return;
-  }
+    const url = req.url ?? '';
+    const match = url.match(/^\/ingest\/([^/]+)$/);
+    if (!match || req.method !== 'POST') {
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'not found' }));
+      return;
+    }
 
-  const sessionId = decodeURIComponent(match[1]);
-  const session = sessions.get(sessionId);
+    let sessionId: string;
+    try {
+      sessionId = decodeURIComponent(match[1]);
+    } catch {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: 'invalid session id encoding' }));
+      return;
+    }
 
-  if (!session) {
-    res.writeHead(404);
-    res.end(JSON.stringify({ error: 'session not found' }));
-    return;
-  }
+    const session = sessions.get(sessionId);
 
-  if (session.status !== 'active') {
-    res.writeHead(410);
-    res.end(JSON.stringify({ error: 'session already stopped' }));
-    return;
-  }
+    if (!session) {
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'session not found' }));
+      return;
+    }
 
-  readBody(req)
-    .then((body) => {
-      let rawEvents: unknown[];
-      try {
-        const parsed: unknown = JSON.parse(body);
-        rawEvents = Array.isArray(parsed) ? parsed : [parsed];
-      } catch {
-        res.writeHead(400);
-        res.end(JSON.stringify({ error: 'invalid JSON' }));
-        return;
-      }
+    if (session.status !== 'active') {
+      res.writeHead(410);
+      res.end(JSON.stringify({ error: 'session already stopped' }));
+      return;
+    }
 
-      let received = 0;
-      for (const raw of rawEvents) {
-        const normalized = parseOneEvent(raw, session.commits.length, sessionId);
-        if (!normalized) {
-          if (raw && typeof raw === 'object' && !('message' in (raw as object))) {
-            session.unknownEvents++;
+    readBody(req)
+      .then((body) => {
+        let rawEvents: unknown[];
+        try {
+          const parsed: unknown = JSON.parse(body);
+          rawEvents = Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'invalid JSON' }));
+          return;
+        }
+
+        let received = 0;
+        for (const raw of rawEvents) {
+          const normalized = parseOneEvent(raw, session.commits.length, sessionId);
+          if (!normalized) {
+            if (raw && typeof raw === 'object' && !('message' in (raw as object))) {
+              session.unknownEvents++;
+            }
+            continue;
           }
-          continue;
+          received++;
+          if (normalized.kind === 'commit') {
+            session.commits.push(normalized.event);
+          } else if (normalized.kind === 'status') {
+            session.profilingAvailable = normalized.available;
+          }
         }
-        received++;
-        if (normalized.kind === 'commit') {
-          session.commits.push(normalized.event);
-        } else if (normalized.kind === 'status') {
-          session.profilingAvailable = normalized.available;
-        }
-      }
 
-      res.writeHead(200);
-      res.end(JSON.stringify({ ok: true, received }));
-    })
-    .catch(() => {
+        res.writeHead(200);
+        res.end(JSON.stringify({ ok: true, received }));
+      })
+      .catch((err) => {
+        if (err instanceof PayloadTooLargeError) {
+          res.writeHead(413);
+          res.end(JSON.stringify({ error: 'payload too large' }));
+          return;
+        }
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'internal error' }));
+      });
+  } catch {
+    if (!res.headersSent) {
       res.writeHead(500);
       res.end(JSON.stringify({ error: 'internal error' }));
-    });
+    }
+  }
 }
 
-// Default port 7721; override with PERFONEXT_INGEST_PORT.
-const _rawPort = parseInt(process.env.PERFONEXT_INGEST_PORT ?? '7721', 10);
-if (!Number.isFinite(_rawPort) || _rawPort < 1 || _rawPort > 65535) {
-  throw new Error(
-    `PERFONEXT_INGEST_PORT must be a number between 1 and 65535 (got: "${process.env.PERFONEXT_INGEST_PORT}")`,
-  );
+// Default port 7721; override with PERFONEXT_INGEST_PORT (0 = OS-assigned ephemeral
+// port, used by tests so the suite never collides with a real running server).
+function resolveIngestPort(): number {
+  const raw = process.env.PERFONEXT_INGEST_PORT;
+  const parsed = parseInt(raw ?? '7721', 10);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 65535) {
+    throw new Error(`PERFONEXT_INGEST_PORT must be a number between 0 and 65535 (got: "${raw}")`);
+  }
+  return parsed;
 }
-const INGEST_PORT = _rawPort;
+
+// Guards concurrent createCaptureSession() calls from racing to bind the same port.
+let startPromise: Promise<number> | null = null;
 
 function startHttpServer(): Promise<number> {
-  return new Promise((resolve, reject) => {
+  if (startPromise) return startPromise;
+
+  const port = resolveIngestPort();
+
+  startPromise = new Promise((resolve, reject) => {
     const server = createServer(handleRequest);
+    server.on('clientError', (_err, socket) => {
+      if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+    });
     // Bind to loopback only — no external exposure.
-    server.listen(INGEST_PORT, '127.0.0.1', () => {
+    server.listen(port, '127.0.0.1', () => {
       const addr = server.address();
       if (!addr || typeof addr === 'string') {
+        startPromise = null;
         reject(new Error('Unexpected server address'));
         return;
       }
@@ -277,10 +349,11 @@ function startHttpServer(): Promise<number> {
       resolve(addr.port);
     });
     server.on('error', (err: NodeJS.ErrnoException) => {
+      startPromise = null;
       if (err.code === 'EADDRINUSE') {
         reject(
           new Error(
-            `Ingest server port ${INGEST_PORT} is already in use. ` +
+            `Ingest server port ${port} is already in use. ` +
               'Free the port or set PERFONEXT_INGEST_PORT to a different value.',
           ),
         );
@@ -289,6 +362,27 @@ function startHttpServer(): Promise<number> {
       }
     });
   });
+
+  return startPromise;
+}
+
+/**
+ * Closes the ingest server and clears all sessions.
+ * @internal Test-only teardown hook — not part of the public tool surface.
+ */
+export async function stopIngestServer(): Promise<void> {
+  const server = httpServer;
+  if (server) {
+    // Close before clearing module state — if close() fails, the server may
+    // still be bound, so leave state intact for diagnosis/retry.
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+  httpServer = null;
+  serverPort = null;
+  startPromise = null;
+  sessions.clear();
 }
 
 // ---------------------------------------------------------------------------

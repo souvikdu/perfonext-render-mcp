@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Ingest server hardening: the test suite now binds to an OS-assigned ephemeral port (`PERFONEXT_INGEST_PORT=0`) instead of the fixed default 7721, so `npm test` no longer fails with `EADDRINUSE` when a render-mcp instance is already running.
+- `createCaptureSession` no longer races to bind the ingest port twice when called concurrently before the server has started.
+- The ingest server now rejects request bodies over 20MB with `413` instead of buffering them unbounded.
+- Malformed percent-encoding in the ingest URL (`decodeURIComponent`) now returns `400` instead of crashing the request handler; a top-level guard and a `clientError` handler protect against other malformed requests.
+- `Access-Control-Allow-Origin` is now scoped to `localhost`/`127.0.0.1` origins (with `Vary: Origin`) instead of a wildcard `*`.
+
 ### Changed
 
 - Publish workflow migrated to npm trusted publishing (OIDC) with `npm publish --provenance`, removing the `NPM_TOKEN` secret. npm is upgraded to latest before publishing to support OIDC authentication.
