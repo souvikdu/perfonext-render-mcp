@@ -19,12 +19,18 @@ import type {
   RerenderScoreBand,
 } from './types.js';
 
-function getScoreBand(score: number): RerenderScoreBand {
-  if (score >= 6) {
+// Frequency-based signals (update count, commit spread, self-intensive ratio) can
+// score "high" even for a component whose total render cost is a few milliseconds.
+// Severity should require both a high score AND a meaningful absolute cost.
+const HIGH_SEVERITY_MIN_DURATION_MS = 5;
+const MEDIUM_SEVERITY_MIN_DURATION_MS = 1;
+
+function getScoreBand(score: number, totalActualDuration: number): RerenderScoreBand {
+  if (score >= 6 && totalActualDuration >= HIGH_SEVERITY_MIN_DURATION_MS) {
     return 'high';
   }
 
-  if (score >= 3) {
+  if (score >= 3 && totalActualDuration >= MEDIUM_SEVERITY_MIN_DURATION_MS) {
     return 'medium';
   }
 
@@ -248,6 +254,14 @@ export function getRerenderCauses(
   limit = 10,
   minDuration = 0,
 ): RerenderCause[] {
+  const commitCount = profile.commits.length;
+  // A component present in a majority of commits indicates sustained rerender
+  // pressure rather than a one-off spike. Scale to session length so a 3-of-3
+  // commit profile doesn't trip the same threshold as a 3-of-40 commit one —
+  // capped at commitCount so very short sessions (1-2 commits) can still trigger
+  // on "every commit" instead of never reaching a fixed floor of 3.
+  const wideSpreadThreshold = Math.min(commitCount, Math.max(3, Math.ceil(commitCount * 0.6)));
+
   const causes = profile.components
     .filter(
       (component) =>
@@ -360,14 +374,16 @@ export function getRerenderCauses(
         });
       }
 
-      if (component.commitIndices.length >= 3) {
+      if (component.commitIndices.length >= wideSpreadThreshold) {
+        const spreadPct =
+          commitCount > 0 ? Math.round((component.commitIndices.length / commitCount) * 100) : 0;
         const commitList =
           component.commitIndices.slice(0, 5).join(', ') +
           (component.commitIndices.length > 5
             ? ` … (+${component.commitIndices.length - 5} more)`
             : '');
         likelyCauses.push(
-          `${component.componentName} appeared in ${component.commitIndices.length} separate commits (commits ${commitList}), ` +
+          `${component.componentName} appeared in ${component.commitIndices.length} of ${commitCount} commits (${spreadPct}%) (commits ${commitList}), ` +
             `which means rerender pressure on this component is sustained across the session rather than a one-off spike. ` +
             `Likely causes are an unstable context value, a subscription or timer that triggers frequent state updates, ` +
             `or a prop that carries a new reference on every parent render.`,
@@ -375,8 +391,8 @@ export function getRerenderCauses(
         evidence.push({
           signal: 'wide-commit-spread',
           observed: component.commitIndices.length,
-          threshold: 3,
-          detail: `${component.componentName} shows up across ${component.commitIndices.length} commits (${commitList}), which usually means rerender pressure is sustained rather than a one-off spike.`,
+          threshold: wideSpreadThreshold,
+          detail: `${component.componentName} shows up across ${component.commitIndices.length} of ${commitCount} commits (${spreadPct}%) (${commitList}), which usually means rerender pressure is sustained rather than a one-off spike.`,
         });
       }
 
@@ -402,9 +418,9 @@ export function getRerenderCauses(
           (
             Math.min(3, component.updateCount) +
             Math.min(3, component.nestedUpdateCount * 1.5) +
-            (component.commitIndices.length >= 3
+            (component.commitIndices.length >= wideSpreadThreshold
               ? 2
-              : component.commitIndices.length >= 2
+              : component.commitIndices.length >= Math.max(2, wideSpreadThreshold - 1)
                 ? 1
                 : 0) +
             (selfToActualRatio >= 0.9 ? 2 : selfToActualRatio >= 0.75 ? 1 : 0) +
@@ -421,7 +437,7 @@ export function getRerenderCauses(
         nestedUpdateCount: component.nestedUpdateCount,
         totalActualDuration: component.totalActualDuration,
         score,
-        scoreBand: getScoreBand(score),
+        scoreBand: getScoreBand(score, component.totalActualDuration),
         confidence: getConfidence(
           evidence.filter((item) => item.signal !== 'limited-export-evidence').length,
         ),

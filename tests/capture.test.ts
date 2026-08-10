@@ -120,6 +120,13 @@ async function postEvents(sessionId: string, events: NativeCommitBody[]): Promis
   });
 }
 
+/** Asserts the ingest server has started before using its port in a request URL. */
+function requireServerPort(): number {
+  const port = getServerPort();
+  expect(port).not.toBeNull();
+  return port as number;
+}
+
 // ---------------------------------------------------------------------------
 // Ingest server — session lifecycle
 // ---------------------------------------------------------------------------
@@ -443,6 +450,133 @@ describe('adaptReactScanEvents', () => {
     expect(fiber.changeDescription?.hooks).toEqual(['hook[0]', 'hook[2]']); // indices → names
     expect(fiber.changeDescription?.context).toBeNull(); // false → null
     expect(fiber.changeDescription?.props).toBeNull();
+  });
+
+  it('clamps selfDuration to actualDuration when selfBaseDuration overshoots it', async () => {
+    const session = await createCaptureSession();
+    const port = requireServerPort();
+
+    await fetch(`http://127.0.0.1:${port}/ingest/${session.sessionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'commit',
+        sessionId: session.sessionId,
+        timestamp: 1000,
+        data: {
+          rendererId: 1,
+          tree: [
+            {
+              fiberId: 20,
+              name: 'Overreporting',
+              depth: 0,
+              actualDuration: 2,
+              selfBaseDuration: 5, // selfBaseDuration can overshoot actualDuration in practice
+              changeDescription: null,
+              source: null,
+            },
+          ],
+        },
+      }),
+    });
+
+    const fiber = session.commits[0].fibers[0];
+    expect(fiber.actualDuration).toBe(2);
+    expect(fiber.selfDuration).toBe(2); // clamped, never exceeds actualDuration
+  });
+
+  it('sums all depth-0 fibers into commit duration instead of using only the first', async () => {
+    const session = await createCaptureSession();
+    const port = requireServerPort();
+
+    await fetch(`http://127.0.0.1:${port}/ingest/${session.sessionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'commit',
+        sessionId: session.sessionId,
+        timestamp: 1000,
+        data: {
+          rendererId: 1,
+          tree: [
+            { fiberId: 30, name: 'RootA', depth: 0, actualDuration: 6, selfBaseDuration: 6 },
+            { fiberId: 31, name: 'RootB', depth: 0, actualDuration: 4, selfBaseDuration: 4 },
+          ],
+        },
+      }),
+    });
+
+    expect(session.commits[0].duration).toBe(10); // 6 + 4, not just the first root's 6
+  });
+
+  it('coerces non-finite or negative wire durations to 0 instead of propagating them', async () => {
+    const session = await createCaptureSession();
+    const port = requireServerPort();
+
+    await fetch(`http://127.0.0.1:${port}/ingest/${session.sessionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'commit',
+        sessionId: session.sessionId,
+        timestamp: 1000,
+        data: {
+          rendererId: 1,
+          tree: [
+            {
+              fiberId: 40,
+              name: 'BadData',
+              depth: 0,
+              actualDuration: Number.NaN,
+              selfBaseDuration: -5,
+            },
+          ],
+        },
+      }),
+    });
+
+    const fiber = session.commits[0].fibers[0];
+    expect(fiber.actualDuration).toBe(0);
+    expect(fiber.selfDuration).toBe(0);
+  });
+});
+
+describe('adaptReactScanEvents — data quality', () => {
+  it('marks hasChangeDescriptions true for a parent-only rerender with no own diff', () => {
+    const profile = adaptReactScanEvents(
+      [
+        {
+          type: 'commit',
+          sessionId: 'test-session',
+          commitIndex: 0,
+          rootId: 1,
+          duration: 4,
+          timestamp: 1000,
+          fibers: [
+            {
+              fiberId: 1,
+              name: 'Child',
+              depth: 0,
+              actualDuration: 4,
+              selfDuration: 4,
+              changeDescription: {
+                isFirstMount: false,
+                props: null,
+                state: null,
+                context: null,
+                hooks: null,
+                parent: true,
+              },
+              source: null,
+              parentId: null,
+            },
+          ],
+        },
+      ],
+      'test-session',
+    );
+
+    expect(profile.hasChangeDescriptions).toBe(true);
   });
 });
 

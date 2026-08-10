@@ -6,8 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-08-10
+
 ### Fixed
 
+- Rerender-cause scoring no longer labels a high-frequency, negligible-cost component as `high` severity: `scoreBand` now requires a minimum absolute `totalActualDuration` in addition to the frequency-based score, so a component with a handful of milliseconds of total render cost caps out at `medium` even if it renders on every commit.
+- The "self-intensive-render" signal could previously report a self/actual duration ratio above 100% (e.g. 112%), since `selfBaseDuration` is measured independently of `actualDuration` and can exceed it. `selfDuration` is now clamped to `actualDuration` at ingestion, so the ratio is always between 0 and 1.
+- Commit duration is now the sum of all depth-0 fibers in a commit instead of only the first one found, fixing cases where a commit reported multiple independent root subtrees and silently dropped the rest of the committed work from `totalCommitDuration` and commit-spike detection.
+- The `wide-commit-spread` rerender signal now scales its threshold to the profile's total commit count (`min(commitCount, max(3, ceil(commitCount * 0.6)))`) instead of a fixed `3`, so a component present in 3 of 3 commits is no longer treated the same as one present in 3 of 40; the threshold is also capped at the profile's own commit count so very short sessions (1-2 commits) can still trigger on "every commit" instead of never reaching a fixed floor. Evidence now reports the spread as "N of M commits".
+- `dataQuality`/`hasChangeDescriptions` now count a parent-triggered-only rerender (`changeDescription.parent`) as exact data, matching the same signal already used for `changeCauses.parentTriggered`.
+- Wire-format `actualDuration`/`selfBaseDuration` values are now coerced to finite, non-negative numbers, so a malformed `NaN`/`Infinity`/negative value from react-scan/lite can no longer propagate into duration totals or ratios.
 - Ingest server hardening: the test suite now binds to an OS-assigned ephemeral port (`PERFONEXT_INGEST_PORT=0`) instead of the fixed default 7721, so `npm test` no longer fails with `EADDRINUSE` when a render-mcp instance is already running.
 - `createCaptureSession` no longer races to bind the ingest port twice when called concurrently before the server has started.
 - The ingest server now rejects request bodies over 20MB with `413` instead of buffering them unbounded.

@@ -70,14 +70,23 @@ interface RawFiber {
   } | null;
 }
 
+/** Coerces to a finite, non-negative duration — rejects NaN/Infinity/negative wire data. */
+function toFiniteDuration(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
 function normalizeFiber(raw: RawFiber): ReactScanFiberEvent {
   const cd = raw.changeDescription ?? null;
+  const actualDuration = toFiniteDuration(raw.actualDuration);
+  const rawSelfDuration = toFiniteDuration(raw.selfBaseDuration);
   return {
     fiberId: typeof raw.fiberId === 'number' ? raw.fiberId : 0,
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : '(anonymous)',
     depth: typeof raw.depth === 'number' ? raw.depth : 0,
-    actualDuration: typeof raw.actualDuration === 'number' ? raw.actualDuration : 0,
-    selfDuration: typeof raw.selfBaseDuration === 'number' ? raw.selfBaseDuration : 0,
+    actualDuration,
+    // selfBaseDuration is measured independently of actualDuration and can exceed
+    // it in practice; clamp so self-cost ratios derived downstream stay <= 1.
+    selfDuration: Math.min(rawSelfDuration, actualDuration),
     changeDescription:
       cd != null
         ? {
@@ -111,10 +120,14 @@ function parseOneEvent(
     if (r.message === 'commit') {
       const tree = Array.isArray(data.tree) ? (data.tree as RawFiber[]) : [];
       const fibers = tree.map(normalizeFiber);
-      // Use root-depth fiber's actualDuration as commit duration; fall back to sum.
-      const rootFiber = fibers.find((f) => f.depth === 0);
+      // A commit can report more than one depth-0 fiber (independent root subtrees,
+      // e.g. a layout boundary alongside a page boundary) — sum them all rather than
+      // taking only the first, which silently dropped the rest of the committed work.
+      const rootDurations = fibers.filter((f) => f.depth === 0).map((f) => f.actualDuration);
       const duration =
-        rootFiber?.actualDuration ?? fibers.reduce((s, f) => s + f.actualDuration, 0);
+        rootDurations.length > 0
+          ? rootDurations.reduce((s, d) => s + d, 0)
+          : fibers.reduce((s, f) => s + f.actualDuration, 0);
 
       return {
         kind: 'commit',

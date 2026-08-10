@@ -155,12 +155,15 @@ export function adaptReactScanEvents(
       const cd = fiber.changeDescription;
       if (cd == null || cd.isFirstMount) continue;
 
-      // Count as "exact" only when at least one diff field carries real data.
+      // Count as "exact" only when at least one diff field carries real data —
+      // a parent-triggered rerender with no own prop/state/context/hook change
+      // is still a real, exact signal (not a heuristic guess), so it counts too.
       const hasRealDiff =
         (cd.props?.length ?? 0) > 0 ||
         cd.state !== null ||
         cd.context !== null ||
-        (cd.hooks?.length ?? 0) > 0;
+        (cd.hooks?.length ?? 0) > 0 ||
+        cd.parent === true;
 
       if (hasRealDiff) hasChangeDescriptions = true;
 
