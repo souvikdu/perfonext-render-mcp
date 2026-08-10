@@ -302,3 +302,121 @@ describe('render profile analysis', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// getRerenderCauses — severity banding and commit-spread threshold scaling
+// ---------------------------------------------------------------------------
+
+/** Builds a minimal profile with `totalCommits` commits, where the tracked component
+ *  renders in the first `appearances` of them (defaults to every commit). */
+function buildSyntheticProfile(
+  totalCommits: number,
+  totalActualDuration: number,
+  appearances: number = totalCommits,
+) {
+  if (appearances < 1) {
+    throw new Error('buildSyntheticProfile requires appearances >= 1');
+  }
+  const perRenderDuration = totalActualDuration / appearances;
+  const commits = Array.from({ length: totalCommits }, (_, index) => ({
+    index,
+    rootId: 1,
+    duration: index < appearances ? perRenderDuration : 0,
+    timestamp: index * 100,
+    priorityLevel: 'Normal',
+    measurements:
+      index < appearances
+        ? [
+            {
+              fiberId: 1,
+              rootId: 1,
+              componentName: 'Chatty',
+              phase: 'update',
+              actualDuration: perRenderDuration,
+              selfDuration: perRenderDuration,
+              startTime: index * 100,
+              commitTime: index * 100,
+              renderCount: 1,
+              commitIndex: index,
+              isNestedUpdate: false,
+            },
+          ]
+        : [],
+    updaterComponentNames: [],
+  }));
+
+  return {
+    id: 'synthetic',
+    filename: 'synthetic',
+    version: '5',
+    rendererId: 1,
+    commits,
+    fiberNodes: [],
+    components: [
+      {
+        componentName: 'Chatty',
+        renderCount: appearances,
+        mountCount: 0,
+        updateCount: appearances,
+        nestedUpdateCount: 0,
+        totalActualDuration,
+        totalSelfDuration: totalActualDuration,
+        maxActualDuration: perRenderDuration,
+        commitIndices: commits.slice(0, appearances).map((c) => c.index),
+      },
+    ],
+    totalCommitDuration: commits.reduce((s, c) => s + c.duration, 0),
+    totalRenderDuration: totalActualDuration,
+    hasChangeDescriptions: false,
+  };
+}
+
+describe('getRerenderCauses — severity tied to absolute cost', () => {
+  it('does not label a high-frequency, negligible-cost component as high severity', () => {
+    // 15 renders, 100% updates, present in every commit, but only 3.3ms total —
+    // the exact shape that previously scored ~7.0/"high" on frequency alone.
+    const profile = buildSyntheticProfile(15, 3.3);
+    const [cause] = getRerenderCauses(profile, 1);
+
+    expect(cause.score).toBeGreaterThanOrEqual(6); // frequency signals still score high
+    expect(cause.scoreBand).not.toBe('high'); // but absolute cost is too small for "high"
+  });
+
+  it('labels a high-frequency, high-cost component as high severity', () => {
+    const profile = buildSyntheticProfile(15, 17.4);
+    const [cause] = getRerenderCauses(profile, 1);
+
+    expect(cause.scoreBand).toBe('high');
+  });
+
+  it('scales the wide-commit-spread threshold to the profile commit count', () => {
+    const small = buildSyntheticProfile(3, 20);
+    const large = buildSyntheticProfile(40, 20, 3); // same 3 appearances, but 40 total commits
+
+    const [smallCause] = getRerenderCauses(small, 1);
+    const [largeCause] = getRerenderCauses(large, 1);
+
+    const smallSpread = smallCause.evidence.find((e) => e.signal === 'wide-commit-spread');
+    const largeSpread = largeCause.evidence.find((e) => e.signal === 'wide-commit-spread');
+
+    // Present in 3 of 3 commits still trips the floor threshold (3).
+    expect(smallSpread?.threshold).toBe(3);
+    // Present in only 3 of 40 commits should NOT trip a threshold scaled to commit count.
+    expect(largeSpread).toBeUndefined();
+  });
+
+  it('still triggers wide-commit-spread on a very short session (fewer than 3 commits)', () => {
+    // With a fixed floor of 3 this could never fire for a 2-commit capture,
+    // even when the component rendered in every single commit.
+    const profile = buildSyntheticProfile(2, 10);
+    const [cause] = getRerenderCauses(profile, 1);
+
+    const spread = cause.evidence.find((e) => e.signal === 'wide-commit-spread');
+    expect(spread?.threshold).toBe(2);
+    expect(spread?.observed).toBe(2);
+  });
+
+  it('rejects an appearances count below 1 rather than producing NaN/Infinity', () => {
+    expect(() => buildSyntheticProfile(5, 10, 0)).toThrow('appearances >= 1');
+  });
+});

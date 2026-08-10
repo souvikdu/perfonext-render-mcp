@@ -16,7 +16,7 @@ import { registerGetCapturedRenders } from './tools/get-captured-renders.js';
 
 const server = new McpServer({
   name: 'perfonext-render-mcp',
-  version: '0.3.2',
+  version: '0.3.3',
 });
 
 registerLoadRenderProfile(server);
