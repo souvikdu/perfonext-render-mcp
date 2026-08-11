@@ -39,25 +39,28 @@ export function registerGetHotCommits(server: McpServer): void {
     async ({ profileId, limit, componentLimit, priorityLevel }) => {
       const profile = requireRenderProfile(profileId);
 
-      const hotCommits = getHotCommits(profile, limit ?? 10, componentLimit ?? 3, priorityLevel).map(
-        (commit) => {
-          // Omit when empty — react-scan/lite live capture never populates this field;
-          // only the React DevTools manual-export path can report real updater names.
-          const { updaterComponentNames, ...rest } = commit;
-          return {
-            ...rest,
-            duration: formatMs(commit.duration),
-            totalActualDuration: formatMs(commit.totalActualDuration),
-            topComponents: commit.topComponents.map((component) => ({
-              ...component,
-              actualDuration: formatMs(component.actualDuration),
-              selfDuration: formatMs(component.selfDuration),
-              shareOfCommitWork: formatPct(component.shareOfCommitWork),
-            })),
-            ...(updaterComponentNames.length > 0 ? { updaterComponentNames } : {}),
-          };
-        },
-      );
+      const hotCommits = getHotCommits(
+        profile,
+        limit ?? 10,
+        componentLimit ?? 3,
+        priorityLevel,
+      ).map((commit) => {
+        // Omit when empty — react-scan/lite live capture never populates this field;
+        // only the React DevTools manual-export path can report real updater names.
+        const { updaterComponentNames, ...rest } = commit;
+        return {
+          ...rest,
+          duration: formatMs(commit.duration),
+          totalActualDuration: formatMs(commit.totalActualDuration),
+          topComponents: commit.topComponents.map((component) => ({
+            ...component,
+            actualDuration: formatMs(component.actualDuration),
+            selfDuration: formatMs(component.selfDuration),
+            shareOfCommitWork: formatPct(component.shareOfCommitWork),
+          })),
+          ...(updaterComponentNames.length > 0 ? { updaterComponentNames } : {}),
+        };
+      });
 
       return {
         content: [
