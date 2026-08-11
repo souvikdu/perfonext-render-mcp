@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { formatMs } from '../format.js';
 import { compareRenders } from '../parser/analysis.js';
-import { getRenderProfile } from '../store.js';
+import { requireRenderProfile } from '../store.js';
 
 function formatDiffEntry<
   T extends {
@@ -53,15 +53,8 @@ export function registerCompareRenders(server: McpServer): void {
       },
     },
     async ({ baseProfileId, currentProfileId, limit, minDeltaMs }) => {
-      const baseProfile = getRenderProfile(baseProfileId);
-      if (!baseProfile) {
-        throw new Error(`Base profile "${baseProfileId}" not found.`);
-      }
-
-      const currentProfile = getRenderProfile(currentProfileId);
-      if (!currentProfile) {
-        throw new Error(`Current profile "${currentProfileId}" not found.`);
-      }
+      const baseProfile = requireRenderProfile(baseProfileId, 'Base profile');
+      const currentProfile = requireRenderProfile(currentProfileId, 'Current profile');
 
       const comparison = compareRenders(baseProfile, currentProfile, limit ?? 10, minDeltaMs ?? 0);
 
@@ -76,6 +69,7 @@ export function registerCompareRenders(server: McpServer): void {
                 improvements: comparison.improvements.map(formatDiffEntry),
                 added: comparison.added.map(formatDiffEntry),
                 removed: comparison.removed.map(formatDiffEntry),
+                nextStep: `call get_rerender_causes with profileId "${currentProfileId}" to see why the regressed components are rerendering`,
               },
               null,
               2,

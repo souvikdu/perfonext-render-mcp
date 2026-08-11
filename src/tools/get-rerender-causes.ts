@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { formatMs } from '../format.js';
 import { getRerenderCauses } from '../parser/analysis.js';
-import { getRenderProfile } from '../store.js';
+import { requireRenderProfile } from '../store.js';
 
 export function registerGetRerenderCauses(server: McpServer): void {
   server.registerTool(
@@ -31,12 +31,7 @@ export function registerGetRerenderCauses(server: McpServer): void {
       },
     },
     async ({ profileId, limit, minDuration }) => {
-      const profile = getRenderProfile(profileId);
-      if (!profile) {
-        throw new Error(
-          `Profile "${profileId}" not found. Call get_render_summary without a profileId to list all loaded profiles.`,
-        );
-      }
+      const profile = requireRenderProfile(profileId);
 
       const causes = getRerenderCauses(profile, limit ?? 10, minDuration ?? 0).map((cause) => ({
         ...cause,
@@ -64,6 +59,10 @@ export function registerGetRerenderCauses(server: McpServer): void {
                   thresholds: { low: '0.0-2.9', medium: '3.0-5.9', high: '6.0-10.0' },
                 },
                 causes,
+                nextStep:
+                  causes[0]?.source != null
+                    ? `open "${causes[0].source.fileName}" at line ${causes[0].source.lineNumber} to inspect the top-ranked cause`
+                    : `call get_slow_components with profileId "${profileId}" for a duration-only ranking`,
               },
               null,
               2,

@@ -11,6 +11,7 @@ import {
   getSlowComponents,
 } from '../src/parser/analysis.js';
 import { parseRenderProfile } from '../src/parser/react-profile.js';
+import type { ComponentStats, ParsedRenderProfile } from '../src/parser/types.js';
 
 const fixturePath = resolve(import.meta.dirname, 'fixtures/sample-render-profile.json');
 const dataForRootsFixturePath = resolve(
@@ -72,8 +73,8 @@ describe('render profile analysis', () => {
     expect(slowComponents.map((component) => component.componentName)).toContain('ProductList');
     expect(causes.length).toBeGreaterThan(0);
     expect(causes.map((cause) => cause.componentName)).toContain('SearchResults');
-    expect(causes[0].likelyCauses.length).toBeGreaterThan(0);
     expect(causes[0].evidence.length).toBeGreaterThan(0);
+    expect(causes[0].evidence[0].detail.length).toBeGreaterThan(0);
     expect(['low', 'medium', 'high']).toContain(causes[0].confidence);
     expect(['low', 'medium', 'high']).toContain(causes[0].scoreBand);
   });
@@ -418,5 +419,54 @@ describe('getRerenderCauses — severity tied to absolute cost', () => {
 
   it('rejects an appearances count below 1 rather than producing NaN/Infinity', () => {
     expect(() => buildSyntheticProfile(5, 10, 0)).toThrow('appearances >= 1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getSlowComponents — internal-component filtering
+// ---------------------------------------------------------------------------
+
+function buildComponent(
+  name: string,
+  totalActualDuration: number,
+  commitIndices: number[],
+): ComponentStats {
+  return {
+    componentName: name,
+    renderCount: commitIndices.length,
+    mountCount: 0,
+    updateCount: commitIndices.length,
+    nestedUpdateCount: 0,
+    totalActualDuration,
+    totalSelfDuration: totalActualDuration,
+    maxActualDuration: totalActualDuration / commitIndices.length,
+    commitIndices,
+  };
+}
+
+function buildMultiComponentProfile(components: ComponentStats[]): ParsedRenderProfile {
+  return {
+    id: 'synthetic-multi',
+    filename: 'synthetic-multi',
+    version: '5',
+    rendererId: 1,
+    commits: [],
+    fiberNodes: [],
+    components,
+    totalCommitDuration: 0,
+    totalRenderDuration: components.reduce((s, c) => s + c.totalActualDuration, 0),
+    hasChangeDescriptions: false,
+  };
+}
+
+describe('getSlowComponents — internal filtering', () => {
+  it('excludes internal framework boundary components like __next_metadata_boundary__', () => {
+    const profile = buildMultiComponentProfile([
+      buildComponent('__next_metadata_boundary__', 5, [0]),
+      buildComponent('RealComponent', 10, [0]),
+    ]);
+
+    const slow = getSlowComponents(profile, 10);
+    expect(slow.map((entry) => entry.componentName)).toEqual(['RealComponent']);
   });
 });

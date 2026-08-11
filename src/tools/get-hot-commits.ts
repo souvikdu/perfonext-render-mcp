@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { formatMs, formatPct } from '../format.js';
 import { getHotCommits } from '../parser/analysis.js';
-import { getRenderProfile } from '../store.js';
+import { requireRenderProfile } from '../store.js';
 
 export function registerGetHotCommits(server: McpServer): void {
   server.registerTool(
@@ -37,29 +37,27 @@ export function registerGetHotCommits(server: McpServer): void {
       },
     },
     async ({ profileId, limit, componentLimit, priorityLevel }) => {
-      const profile = getRenderProfile(profileId);
-      if (!profile) {
-        throw new Error(
-          `Profile "${profileId}" not found. Call get_render_summary without a profileId to list all loaded profiles.`,
-        );
-      }
+      const profile = requireRenderProfile(profileId);
 
-      const hotCommits = getHotCommits(
-        profile,
-        limit ?? 10,
-        componentLimit ?? 3,
-        priorityLevel,
-      ).map((commit) => ({
-        ...commit,
-        duration: formatMs(commit.duration),
-        totalActualDuration: formatMs(commit.totalActualDuration),
-        topComponents: commit.topComponents.map((component) => ({
-          ...component,
-          actualDuration: formatMs(component.actualDuration),
-          selfDuration: formatMs(component.selfDuration),
-          shareOfCommitWork: formatPct(component.shareOfCommitWork),
-        })),
-      }));
+      const hotCommits = getHotCommits(profile, limit ?? 10, componentLimit ?? 3, priorityLevel).map(
+        (commit) => {
+          // Omit when empty — react-scan/lite live capture never populates this field;
+          // only the React DevTools manual-export path can report real updater names.
+          const { updaterComponentNames, ...rest } = commit;
+          return {
+            ...rest,
+            duration: formatMs(commit.duration),
+            totalActualDuration: formatMs(commit.totalActualDuration),
+            topComponents: commit.topComponents.map((component) => ({
+              ...component,
+              actualDuration: formatMs(component.actualDuration),
+              selfDuration: formatMs(component.selfDuration),
+              shareOfCommitWork: formatPct(component.shareOfCommitWork),
+            })),
+            ...(updaterComponentNames.length > 0 ? { updaterComponentNames } : {}),
+          };
+        },
+      );
 
       return {
         content: [
@@ -70,7 +68,10 @@ export function registerGetHotCommits(server: McpServer): void {
                 profileId,
                 timestampNote:
                   'timestamp values are milliseconds since the profiling session started, not Unix epoch',
+                measurementCountNote:
+                  'measurementCount is the total fiber renders in this commit (all components, before ranking) — not the count of topComponents below',
                 hotCommits,
+                nextStep: `call get_slow_components with profileId "${profileId}" to rank components across the whole session, not just this commit`,
               },
               null,
               2,

@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { formatMs } from '../format.js';
 import { getSlowComponents } from '../parser/analysis.js';
-import { getRenderProfile } from '../store.js';
+import { requireRenderProfile } from '../store.js';
 
 export function registerGetSlowComponents(server: McpServer): void {
   server.registerTool(
@@ -37,12 +37,7 @@ export function registerGetSlowComponents(server: McpServer): void {
       },
     },
     async ({ profileId, limit, sortBy, minDuration }) => {
-      const profile = getRenderProfile(profileId);
-      if (!profile) {
-        throw new Error(
-          `Profile "${profileId}" not found. Call get_render_summary without a profileId to list all loaded profiles.`,
-        );
-      }
+      const profile = requireRenderProfile(profileId);
 
       const slowComponents = getSlowComponents(
         profile,
@@ -61,7 +56,15 @@ export function registerGetSlowComponents(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify({ profileId, slowComponents }, null, 2),
+            text: JSON.stringify(
+              {
+                profileId,
+                slowComponents,
+                nextStep: `call get_rerender_causes with profileId "${profileId}" to see why these components are rerendering`,
+              },
+              null,
+              2,
+            ),
           },
         ],
       };

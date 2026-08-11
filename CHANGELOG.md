@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `nextStep` breadcrumbs on `load_render_profile`, `get_render_summary`, `get_slow_components`, `get_hot_commits`, `get_rerender_causes`, and `compare_renders`, matching the multi-step agent-flow contract already used by the live-capture tools.
+
+### Changed
+
+- `get_rerender_causes` no longer returns a separate `likelyCauses` array alongside `evidence` — the actionable guidance is now folded directly into each `evidence[].detail`, removing the duplicated terse/prose pairing and shrinking the response.
+- Internal framework boundary components (e.g. `__next_metadata_boundary__`) are now excluded from all ranked output and `componentCount`, alongside the existing host-element and anonymous-component filtering.
+- `get_hot_commits` now omits `updaterComponentNames` from its output when empty (always the case for react-scan/lite live capture) instead of returning a dead `[]`, and documents `measurementCount` inline.
+
+### Fixed
+
+- The five duplicated "profile not found" guards across `get_render_summary`, `get_slow_components`, `get_hot_commits`, `get_rerender_causes`, and `compare_renders` are now a single `requireRenderProfile()` helper in `store.ts`, with a consistent error message.
+
 ## [0.3.3] - 2026-08-10
 
 ### Fixed

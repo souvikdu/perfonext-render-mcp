@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { formatMs, formatPct } from '../format.js';
 import { getRenderSummary as summarizeRenderProfile } from '../parser/analysis.js';
-import { getRenderProfile, listRenderProfiles } from '../store.js';
+import { listRenderProfiles, requireRenderProfile } from '../store.js';
 
 export function registerGetRenderSummary(server: McpServer): void {
   server.registerTool(
@@ -47,13 +47,7 @@ export function registerGetRenderSummary(server: McpServer): void {
         };
       }
 
-      const profile = getRenderProfile(profileId);
-      if (!profile) {
-        throw new Error(
-          `Profile "${profileId}" not found. Call get_render_summary without a profileId to list all loaded profiles.`,
-        );
-      }
-
+      const profile = requireRenderProfile(profileId);
       const summary = summarizeRenderProfile(profile, limit ?? 10);
 
       return {
@@ -82,6 +76,7 @@ export function registerGetRenderSummary(server: McpServer): void {
                     shareOfCommitWork: formatPct(component.shareOfCommitWork),
                   })),
                 })),
+                nextStep: `call get_rerender_causes with profileId "${profileId}" for why the top components are rerendering, or compare_renders against a baseline profile`,
               },
               null,
               2,

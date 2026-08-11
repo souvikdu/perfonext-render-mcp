@@ -48,9 +48,15 @@ function isAnonymousComponent(name: string): boolean {
   return name === 'Anonymous' || name.startsWith('(fiber:');
 }
 
+/** Returns true for internal framework boundary markers (e.g. `__next_metadata_boundary__`)
+ *  that aren't user code and can't be optimized. */
+function isInternalComponent(name: string): boolean {
+  return /^__.+__$/.test(name);
+}
+
 /** Returns true for named React components that appear in ranked analysis output. */
 export function isAnalyzableComponent(name: string): boolean {
-  return !isHostElement(name) && !isAnonymousComponent(name);
+  return !isHostElement(name) && !isAnonymousComponent(name) && !isInternalComponent(name);
 }
 
 function getConfidence(evidenceCount: number): RerenderConfidence {
@@ -114,10 +120,7 @@ function getCommitTopComponents(commit: RenderCommit, limit: number): HotCommitC
   }
 
   return Array.from(components.values())
-    .filter(
-      (component) =>
-        !isHostElement(component.componentName) && !isAnonymousComponent(component.componentName),
-    )
+    .filter((component) => isAnalyzableComponent(component.componentName))
     .sort((left, right) => right.actualDuration - left.actualDuration)
     .slice(0, limit)
     .map((component) => ({
@@ -220,8 +223,7 @@ export function getSlowComponents(
   const entries: RenderSummaryEntry[] = profile.components
     .filter(
       (component) =>
-        !isHostElement(component.componentName) &&
-        !isAnonymousComponent(component.componentName) &&
+        isAnalyzableComponent(component.componentName) &&
         component.totalActualDuration >= minDuration,
     )
     .map((component) => ({
@@ -265,13 +267,11 @@ export function getRerenderCauses(
   const causes = profile.components
     .filter(
       (component) =>
-        !isHostElement(component.componentName) &&
-        !isAnonymousComponent(component.componentName) &&
+        isAnalyzableComponent(component.componentName) &&
         (component.updateCount > 0 || component.nestedUpdateCount > 0) &&
         component.totalActualDuration >= minDuration,
     )
     .map((component) => {
-      const likelyCauses: string[] = [];
       const evidence: RerenderEvidence[] = [];
       const selfToActualRatio =
         component.totalActualDuration > 0
@@ -293,17 +293,15 @@ export function getRerenderCauses(
           parts.push('parent re-rendered (no own prop/state change)');
 
         if (parts.length > 0) {
-          likelyCauses.push(
-            `${component.componentName} re-rendered because: ${parts.join('; ')}.` +
-              (cc.parentTriggered && parts.length > 1
-                ? ' Also triggered by parent re-renders.'
-                : ''),
-          );
           evidence.push({
             signal: 'exact-change-description',
             observed: parts.join('; '),
             threshold: 'n/a',
-            detail: `react-scan/lite reported exact change causes for ${component.componentName} across ${component.updateCount} update render${component.updateCount === 1 ? '' : 's'}.`,
+            detail:
+              `${component.componentName} re-rendered because: ${parts.join('; ')}.` +
+              (cc.parentTriggered && parts.length > 1
+                ? ' Also triggered by parent re-renders.'
+                : ''),
           });
         }
       }
@@ -315,62 +313,42 @@ export function getRerenderCauses(
             : 0;
         const mountPct = 100 - updatePct;
 
-        let causeText: string;
+        let advice: string;
         if (updatePct >= 80) {
-          causeText =
-            `${component.componentName} rendered in update phase ${component.updateCount} of ${component.renderCount} times (${updatePct}% updates, ${mountPct}% mounts). ` +
-            `It almost never remounts fresh, which means it is staying alive and re-rendering in place repeatedly. ` +
-            `The likely driver is a parent passing new object/array/function references on every render, or the component's own state being set more often than intended. ` +
-            `Check for inline object props, unstable callback references, or a context value that changes on every parent render.`;
+          advice =
+            'It almost never remounts fresh, staying alive and re-rendering in place — check for inline object/array/function props, unstable callback references, or a context value that changes on every parent render.';
         } else if (updatePct >= 40) {
-          causeText =
-            `${component.componentName} has a mixed mount/update pattern: ${updatePct}% updates, ${mountPct}% mounts across ${component.renderCount} renders. ` +
-            `The component is sometimes remounting fresh and sometimes updating in place, which can mean it is conditionally included in the tree, ` +
-            `or its React key changes on some renders (causing a full unmount+mount). ` +
-            `Investigate whether key changes are intentional and whether conditional rendering could be replaced with CSS visibility to avoid remount cost.`;
+          advice =
+            'Mixed mount/update pattern — investigate whether key changes are intentional; conditional rendering could be replaced with CSS visibility to avoid remount cost.';
         } else {
-          causeText =
-            `${component.componentName} is mostly mounting rather than updating: ${mountPct}% mounts vs ${updatePct}% updates across ${component.renderCount} renders. ` +
-            `This level of remounting usually points to unstable list keys, a parent that conditionally unmounts and recreates the component, ` +
-            `or a component defined inside a render function (which creates a new type on every render and forces React to unmount instead of update). ` +
-            `Ensure keys are stable identifiers and that the component is not defined inline.`;
+          advice =
+            'Mostly mounting rather than updating — check for unstable list keys, a parent conditionally unmounting/recreating this component, or a component type defined inline inside a render function.';
         }
-        likelyCauses.push(causeText);
+
         evidence.push({
           signal: 'repeated-update-phases',
           observed: component.updateCount,
           threshold: 2,
-          detail: `${component.componentName} entered the update phase ${component.updateCount} times (${updatePct}%) across ${component.commitIndices.length} commit${component.commitIndices.length === 1 ? '' : 's'}. Mount/update ratio: ${mountPct}% mounts, ${updatePct}% updates.`,
+          detail: `${component.componentName} entered the update phase ${component.updateCount} of ${component.renderCount} times (${updatePct}% updates, ${mountPct}% mounts) across ${component.commitIndices.length} commit${component.commitIndices.length === 1 ? '' : 's'}. ${advice}`,
         });
       }
 
       if (component.nestedUpdateCount > 0) {
-        likelyCauses.push(
-          `${component.nestedUpdateCount} of ${component.componentName}'s renders were triggered as nested updates ` +
-            `(the component itself was listed as an updater for its own commit). ` +
-            `This is a strong indicator of a render-then-setState loop, an effect with missing or incorrect dependencies, ` +
-            `or a context provider that updates its value during render.`,
-        );
         evidence.push({
           signal: 'nested-update-propagation',
           observed: component.nestedUpdateCount,
           threshold: 1,
-          detail: `${component.componentName} appeared as an updater in ${component.nestedUpdateCount} of its own commits, which is a strong hint that rerender work is self-propagating inside this subtree.`,
+          detail: `${component.nestedUpdateCount} of ${component.componentName}'s renders were nested updates (self-triggered as an updater for its own commit) — a strong indicator of a render-then-setState loop, an effect with missing/incorrect dependencies, or a context provider updating its value during render.`,
         });
       }
 
       if (selfToActualRatio >= 0.9) {
         const selfPct = Math.round(selfToActualRatio * 100);
-        likelyCauses.push(
-          `${selfPct}% of ${component.componentName}'s render cost is self-contained (not delegated to children). ` +
-            `The component body itself is doing the heavy lifting — likely expensive JSX construction, inline computations, or heavy formatting on each render. ` +
-            `Wrapping with React.memo will prevent unnecessary calls, and moving expensive calculations into useMemo will avoid recomputing them when unrelated state changes.`,
-        );
         evidence.push({
           signal: 'self-intensive-render',
           observed: Number(selfToActualRatio.toFixed(2)),
           threshold: 0.9,
-          detail: `Self duration is ${selfPct}% of actual duration for ${component.componentName}, indicating this component does most render work in its own body rather than delegating to children. Direct memoization of this component is the correct fix.`,
+          detail: `Self duration is ${selfPct}% of actual duration for ${component.componentName} — the component's own body (not children) does most of the work, likely expensive JSX construction, inline computations, or formatting. Wrap with React.memo and move expensive calculations into useMemo.`,
         });
       }
 
@@ -382,32 +360,20 @@ export function getRerenderCauses(
           (component.commitIndices.length > 5
             ? ` … (+${component.commitIndices.length - 5} more)`
             : '');
-        likelyCauses.push(
-          `${component.componentName} appeared in ${component.commitIndices.length} of ${commitCount} commits (${spreadPct}%) (commits ${commitList}), ` +
-            `which means rerender pressure on this component is sustained across the session rather than a one-off spike. ` +
-            `Likely causes are an unstable context value, a subscription or timer that triggers frequent state updates, ` +
-            `or a prop that carries a new reference on every parent render.`,
-        );
         evidence.push({
           signal: 'wide-commit-spread',
           observed: component.commitIndices.length,
           threshold: wideSpreadThreshold,
-          detail: `${component.componentName} shows up across ${component.commitIndices.length} of ${commitCount} commits (${spreadPct}%) (${commitList}), which usually means rerender pressure is sustained rather than a one-off spike.`,
+          detail: `${component.componentName} shows up across ${component.commitIndices.length} of ${commitCount} commits (${spreadPct}%) (${commitList}) — sustained rerender pressure rather than a one-off spike. Likely an unstable context value, a subscription/timer triggering frequent updates, or a prop carrying a new reference every parent render.`,
         });
       }
 
-      if (likelyCauses.length === 0) {
-        likelyCauses.push(
-          `${component.componentName} rendered ${component.updateCount} time${component.updateCount === 1 ? '' : 's'} in update phase, ` +
-            `but the signals are below the thresholds for specific heuristics. ` +
-            `React Profiler exports do not include prop/state diffs, so the exact trigger cannot be determined from this data alone. ` +
-            `Use why-did-you-render or React DevTools to capture the specific prop or state change.`,
-        );
+      if (evidence.length === 0) {
         evidence.push({
           signal: 'limited-export-evidence',
           observed: component.commitIndices.length,
           threshold: 'n/a',
-          detail: `React Profiler exports do not include exact prop/state diffs, so only weak rerender signals were available for ${component.componentName}.`,
+          detail: `${component.componentName} rendered ${component.updateCount} time${component.updateCount === 1 ? '' : 's'} in update phase, but signals are below the thresholds for specific heuristics. React Profiler exports lack prop/state diffs — use why-did-you-render or React DevTools to find the exact trigger.`,
         });
       }
 
@@ -442,7 +408,6 @@ export function getRerenderCauses(
           evidence.filter((item) => item.signal !== 'limited-export-evidence').length,
         ),
         evidence,
-        likelyCauses,
       };
       if (component.source) result.source = component.source;
       return result;
@@ -720,7 +685,8 @@ export function detectRenderIssues(profile: ParsedRenderProfile, limit = 10): Re
       type: 'rerender-storm',
       severity: cause.scoreBand,
       title: `${cause.componentName} rerenders frequently`,
-      summary: cause.likelyCauses[0] ?? `${cause.componentName} shows repeated rerender pressure.`,
+      summary:
+        cause.evidence[0]?.detail ?? `${cause.componentName} shows repeated rerender pressure.`,
       componentName: cause.componentName,
       evidence: cause.evidence,
     });

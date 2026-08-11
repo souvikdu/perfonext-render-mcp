@@ -164,7 +164,6 @@ export interface RerenderCause {
   scoreBand: RerenderScoreBand;
   confidence: RerenderConfidence;
   evidence: RerenderEvidence[];
-  likelyCauses: string[];
   source?: ComponentSource;
 }
 
