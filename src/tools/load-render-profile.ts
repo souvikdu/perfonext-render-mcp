@@ -41,6 +41,7 @@ export function registerLoadRenderProfile(server: McpServer): void {
                 commitCount: profile.commits.length,
                 componentCount: profile.components.length,
                 totalCommitDuration: formatMs(profile.totalCommitDuration),
+                nextStep: `call get_render_summary with profileId "${profile.id}"`,
               },
               null,
               2,
