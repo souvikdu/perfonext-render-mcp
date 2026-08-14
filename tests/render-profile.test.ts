@@ -470,3 +470,35 @@ describe('getSlowComponents — internal filtering', () => {
     expect(slow.map((entry) => entry.componentName)).toEqual(['RealComponent']);
   });
 });
+
+describe('getRenderSummary — minified-name detection', () => {
+  it('warns when most component names look minified (production build)', () => {
+    const profile = buildMultiComponentProfile([
+      buildComponent('O', 10, [0]),
+      buildComponent('P', 10, [0]),
+      buildComponent('R', 10, [0]),
+      buildComponent('LineChart', 10, [0]),
+    ]);
+
+    const summary = getRenderSummary(profile);
+    expect(summary.warnings.some((w) => w.includes('look minified'))).toBe(true);
+  });
+
+  it('does not warn when component names look normal', () => {
+    const profile = buildMultiComponentProfile([
+      buildComponent('TrailExplorer', 10, [0]),
+      buildComponent('SearchInput', 10, [0]),
+      buildComponent('RegionSelect', 10, [0]),
+    ]);
+
+    const summary = getRenderSummary(profile);
+    expect(summary.warnings.some((w) => w.includes('look minified'))).toBe(false);
+  });
+
+  it('does not warn on a small component count even if all names are short', () => {
+    const profile = buildMultiComponentProfile([buildComponent('O', 10, [0])]);
+
+    const summary = getRenderSummary(profile);
+    expect(summary.warnings.some((w) => w.includes('look minified'))).toBe(false);
+  });
+});

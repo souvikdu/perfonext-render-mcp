@@ -120,6 +120,19 @@ Copilot will:
 > expose the React DevTools profiling channel, so `changeDescription` data is unavailable and causes fall back
 > to heuristics (`dataQuality: "heuristic"`).
 
+> **Two preconditions commonly cause a silent `commitCount: 0`:**
+>
+> - **Build flavor.** A plain `next build`/`next start` compiles out React's profiling hooks entirely.
+>   Choose one of:
+>   - `next dev` — real component names, but dev-mode overhead means render timings and proportions
+>     may not match what real users experience in production.
+>   - `next build --profile` then `next start` — production-accurate timings, but component names get
+>     minified to 1-2 letters (e.g. `"V"`) by production minification, regardless of the profiling flag.
+>     `get_render_summary` surfaces a warning when this is detected.
+> - **Instrumentation timing.** `instrument()` must run before React initializes — a static top-level import
+>   (as shown in the generated snippet) works; mounting it as a React component, or calling it inside a
+>   `useEffect`, runs too late and silently captures nothing.
+
 The ingest server runs on a **fixed port (7721)**. Only the `sessionId` line in `instrumentation-client.js` changes between sessions — the file does not need to be re-wired each time.
 
 **Option B — Manual DevTools export**

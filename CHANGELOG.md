@@ -6,9 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-08-14
+
 ### Added
 
 - `nextStep` breadcrumbs on `load_render_profile`, `get_render_summary`, `get_slow_components`, `get_hot_commits`, `get_rerender_causes`, and `compare_renders`, matching the multi-step agent-flow contract already used by the live-capture tools.
+- `get_render_summary` now warns when a majority of ranked component names look minified (e.g. `"V"`, `"O"`) — expected when capturing against `next build --profile`, since production minification strips displayName info regardless of the profiling flag. Points at `next dev` for real names when production-accurate timing isn't required.
+- `begin_render_analysis` (live) now returns a `preconditions` field naming the two undocumented requirements that previously caused a silent `commitCount: 0`, and clarifies the tradeoff between the two working build flavors: `next dev` (real names, dev-mode timing) vs. `next build --profile` + `next start` (production-accurate timing, minified names). `instrument()` must also run as a static top-level import, not inside a mounted component or `useEffect`.
 
 ### Changed
 
@@ -18,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `stop_render_capture`'s zero-commit warning previously recommended aliasing `react-dom` to `react-dom/profiling`, which doesn't apply to this instrumentation path. It now names the actual causes: a plain `next build`/`next start`, or `instrument()` running after React initializes.
 - The five duplicated "profile not found" guards across `get_render_summary`, `get_slow_components`, `get_hot_commits`, `get_rerender_causes`, and `compare_renders` are now a single `requireRenderProfile()` helper in `store.ts`, with a consistent error message.
 
 ## [0.3.3] - 2026-08-10
