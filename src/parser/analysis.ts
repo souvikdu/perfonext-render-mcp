@@ -189,11 +189,27 @@ export function getRenderSummary(
     .map((c) => c.componentName);
   const uniqueAnonymous = [...new Set(anonymousNames)];
 
+  const analyzableNames = profile.components
+    .map((c) => c.componentName)
+    .filter((name) => isAnalyzableComponent(name));
+  // 1-2 letter names are the signature of a production build mangling displayName —
+  // real components essentially never end up this short on their own.
+  const minifiedNames = analyzableNames.filter((name) => /^[A-Za-z]{1,2}$/.test(name));
+
   const warnings: string[] = [];
   if (uniqueAnonymous.length > 0) {
     warnings.push(
       `${uniqueAnonymous.length} unnamed component${uniqueAnonymous.length > 1 ? 's' : ''} found (e.g. "Anonymous"). ` +
         `These are excluded from analysis. Add a displayName or convert arrow functions to named function expressions to get actionable results.`,
+    );
+  }
+  if (analyzableNames.length >= 3 && minifiedNames.length / analyzableNames.length >= 0.3) {
+    warnings.push(
+      `${minifiedNames.length} of ${analyzableNames.length} component names look minified (e.g. "${minifiedNames[0]}"). ` +
+        'This is expected when capturing against `next build --profile` — production minification strips ' +
+        "displayName info regardless of the profiling flag, so findings naming these components aren't " +
+        "actionable as-is. If you don't need production-accurate timings, capture against `next dev` instead " +
+        "for real names; otherwise check each entry's `source` field (if present) to map back to a file.",
     );
   }
 

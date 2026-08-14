@@ -56,10 +56,14 @@ export function registerStopRenderCapture(server: McpServer): void {
         const warning =
           session.profilingAvailable === false
             ? 'No commits captured. The app reported profiling-hooks-status: false — ' +
-              'this usually means the app is running a production build. ' +
-              'Switch to `next dev` or alias react-dom to react-dom/profiling.'
-            : 'No commits captured. Make sure the instrumentation snippet was loaded ' +
-              'and you interacted with the app while the session was active.';
+              "this means the app is running a plain production build. React's profiling hooks are only " +
+              'compiled in by `next dev`, or `next build --profile` followed by `next start` — a plain ' +
+              '`next build`/`next start` will not work.'
+            : 'No commits captured, even though profiling hooks were available. The most common cause is ' +
+              'timing: instrument() must run before React initializes (a static top-level import in your ' +
+              'client entry module), not inside a useEffect or a mounted component — by the time a component ' +
+              'mounts, React has already decided whether to install its hooks. Also confirm you interacted ' +
+              'with the app while the session was active.';
 
         return {
           content: [
