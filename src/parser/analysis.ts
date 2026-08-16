@@ -1,6 +1,4 @@
 import type {
-  CommitBreakdown,
-  CommitBreakdownComponentSummary,
   FiberNode,
   HotCommitComponentSummary,
   HotCommitSummary,
@@ -137,6 +135,23 @@ function getCommitByIndex(
   return profile.commits.find((commit) => commit.index === commitIndex);
 }
 
+/** One-line takeaway for where a commit's cost is concentrated, derived from the
+ *  same shareOfCommitWork data already computed for topComponents. */
+function getConcentrationInterpretation(topComponents: HotCommitComponentSummary[]): string {
+  const topComponentShare = topComponents[0]?.shareOfCommitWork ?? 0;
+  const topThreeShare = topComponents
+    .slice(0, 3)
+    .reduce((sum, component) => sum + component.shareOfCommitWork, 0);
+
+  if (topComponentShare >= 0.5) {
+    return 'This commit is dominated by one component, so investigate that component before the rest of the tree.';
+  }
+  if (topThreeShare >= 0.8) {
+    return 'This commit is concentrated in a small set of components, so the spike is likely localized to one subtree.';
+  }
+  return 'This commit spreads work across several components, which often points to broader parent-to-child rerender propagation.';
+}
+
 export function getHotCommits(
   profile: ParsedRenderProfile,
   limit = 10,
@@ -145,17 +160,21 @@ export function getHotCommits(
 ): HotCommitSummary[] {
   return profile.commits
     .filter((commit) => priorityLevel == null || commit.priorityLevel === priorityLevel)
-    .map((commit) => ({
-      commitIndex: commit.index,
-      rootId: commit.rootId,
-      duration: commit.duration,
-      totalActualDuration: getMeasurementsTotalActualDuration(commit.measurements),
-      timestamp: commit.timestamp,
-      priorityLevel: commit.priorityLevel,
-      measurementCount: commit.measurements.length,
-      topComponents: getCommitTopComponents(commit, componentLimit),
-      updaterComponentNames: commit.updaterComponentNames,
-    }))
+    .map((commit) => {
+      const topComponents = getCommitTopComponents(commit, componentLimit);
+      return {
+        commitIndex: commit.index,
+        rootId: commit.rootId,
+        duration: commit.duration,
+        totalActualDuration: getMeasurementsTotalActualDuration(commit.measurements),
+        timestamp: commit.timestamp,
+        priorityLevel: commit.priorityLevel,
+        measurementCount: commit.measurements.length,
+        topComponents,
+        updaterComponentNames: commit.updaterComponentNames,
+        interpretation: getConcentrationInterpretation(topComponents),
+      };
+    })
     .sort((left, right) => {
       if (right.duration !== left.duration) {
         return right.duration - left.duration;
@@ -437,90 +456,6 @@ export function getRerenderCauses(
     });
 
   return causes.slice(0, limit);
-}
-
-export function getCommitBreakdown(
-  profile: ParsedRenderProfile,
-  commitIndex: number,
-  componentLimit = 5,
-): CommitBreakdown | null {
-  const commit = getCommitByIndex(profile, commitIndex);
-  if (!commit) {
-    return null;
-  }
-
-  const totalActualDuration = getMeasurementsTotalActualDuration(commit.measurements);
-  const components = new Map<string, CommitBreakdownComponentSummary>();
-
-  for (const measurement of commit.measurements) {
-    const existing = components.get(measurement.componentName) ?? {
-      componentName: measurement.componentName,
-      actualDuration: 0,
-      selfDuration: 0,
-      renderCount: 0,
-      shareOfCommitWork: 0,
-      mountCount: 0,
-      updateCount: 0,
-      nestedUpdateCount: 0,
-    };
-
-    existing.actualDuration += measurement.actualDuration;
-    existing.selfDuration += measurement.selfDuration;
-    existing.renderCount += 1;
-    if (measurement.phase === 'mount') {
-      existing.mountCount += 1;
-    } else {
-      existing.updateCount += 1;
-      if (measurement.isNestedUpdate) {
-        existing.nestedUpdateCount += 1;
-      }
-    }
-
-    components.set(measurement.componentName, existing);
-  }
-
-  const topComponents = Array.from(components.values())
-    .sort((left, right) => right.actualDuration - left.actualDuration)
-    .slice(0, componentLimit)
-    .map((component) => ({
-      ...component,
-      shareOfCommitWork:
-        totalActualDuration > 0 ? component.actualDuration / totalActualDuration : 0,
-    }));
-
-  const topComponentShare = topComponents[0]?.shareOfCommitWork ?? 0;
-  const topThreeShare = topComponents
-    .slice(0, 3)
-    .reduce((sum, component) => sum + component.shareOfCommitWork, 0);
-
-  let interpretation: string;
-  if (topComponentShare >= 0.5) {
-    interpretation =
-      'This commit is dominated by one component, so investigate that component before the rest of the tree.';
-  } else if (topThreeShare >= 0.8) {
-    interpretation =
-      'This commit is concentrated in a small set of components, so the spike is likely localized to one subtree.';
-  } else {
-    interpretation =
-      'This commit spreads work across several components, which often points to broader parent-to-child rerender propagation.';
-  }
-
-  return {
-    commitIndex: commit.index,
-    rootId: commit.rootId,
-    duration: commit.duration,
-    totalActualDuration,
-    timestamp: commit.timestamp,
-    priorityLevel: commit.priorityLevel,
-    measurementCount: commit.measurements.length,
-    updaterComponentNames: commit.updaterComponentNames,
-    topComponents,
-    concentration: {
-      topComponentShare,
-      topThreeShare,
-    },
-    interpretation,
-  };
 }
 
 export function traceRenderPropagation(

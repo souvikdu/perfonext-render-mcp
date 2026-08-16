@@ -1,9 +1,19 @@
 import type { ParsedRenderProfile } from './parser/types.js';
 
+// Caps memory growth for a long-running session — a Map keeps insertion order,
+// so evicting the oldest entry once we're over the cap is a cheap FIFO policy
+// (no LRU/access-tracking needed; usage is naturally sequential: load/capture,
+// analyze, move on).
+const MAX_PROFILES = 20;
+
 const profiles = new Map<string, ParsedRenderProfile>();
 
 export function storeRenderProfile(profile: ParsedRenderProfile): void {
   profiles.set(profile.id, profile);
+  if (profiles.size > MAX_PROFILES) {
+    const oldestId = profiles.keys().next().value;
+    if (oldestId !== undefined) profiles.delete(oldestId);
+  }
 }
 
 /** Test-only teardown hook — clears all stored profiles so test order can't leak state. */
