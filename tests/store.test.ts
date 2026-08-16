@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { clearRenderProfiles, requireRenderProfile, storeRenderProfile } from '../src/store.js';
+import {
+  clearRenderProfiles,
+  getRenderProfile,
+  requireRenderProfile,
+  storeRenderProfile,
+} from '../src/store.js';
 import type { ParsedRenderProfile } from '../src/parser/types.js';
 
 function buildProfile(id: string): ParsedRenderProfile {
@@ -40,5 +45,14 @@ describe('requireRenderProfile', () => {
     expect(() => requireRenderProfile('missing', 'Base profile')).toThrow(
       'Base profile "missing" not found. Call get_render_summary without a profileId to list all loaded profiles.',
     );
+  });
+
+  it('evicts the oldest profile once the cap is exceeded', () => {
+    for (let i = 0; i < 21; i++) {
+      storeRenderProfile(buildProfile(`p${i}`));
+    }
+
+    expect(getRenderProfile('p0')).toBeUndefined(); // oldest, evicted
+    expect(getRenderProfile('p20')).toBeDefined(); // newest, kept
   });
 });

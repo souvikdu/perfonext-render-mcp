@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-16
+
+### Added
+
+- `get_hot_commits` entries now include an `interpretation` field summarizing where a commit's cost is concentrated (dominated by one component, a small set, or spread across several) — the useful part of the never-wired-up `getCommitBreakdown` function, folded into the tool that already returns everything else needed to compute it.
+
+### Changed
+
+- Loaded/captured render profiles are now capped at 20 in memory; the oldest is evicted once a new one pushes past the cap, preventing unbounded memory growth over a long-running session.
+
+### Removed
+
+- The standalone `getCommitBreakdown` implementation and its `CommitBreakdown`/`CommitBreakdownComponentSummary` types. Its useful concentration summary is now folded into `get_hot_commits` instead of being exposed as a separate tool.
+
 ## [0.3.4] - 2026-08-14
 
 ### Added

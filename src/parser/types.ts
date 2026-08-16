@@ -108,28 +108,6 @@ export interface HotCommitSummary {
   measurementCount: number;
   topComponents: HotCommitComponentSummary[];
   updaterComponentNames: string[];
-}
-
-export interface CommitBreakdownComponentSummary extends HotCommitComponentSummary {
-  mountCount: number;
-  updateCount: number;
-  nestedUpdateCount: number;
-}
-
-export interface CommitBreakdown {
-  commitIndex: number;
-  rootId: number;
-  duration: number;
-  totalActualDuration: number;
-  timestamp: number;
-  priorityLevel: string | null;
-  measurementCount: number;
-  updaterComponentNames: string[];
-  topComponents: CommitBreakdownComponentSummary[];
-  concentration: {
-    topComponentShare: number;
-    topThreeShare: number;
-  };
   interpretation: string;
 }
 

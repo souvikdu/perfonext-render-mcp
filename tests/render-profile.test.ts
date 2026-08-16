@@ -89,6 +89,21 @@ describe('render profile analysis', () => {
     expect(hotCommits[0].topComponents).toHaveLength(2);
     expect(hotCommits[0].topComponents[0].shareOfCommitWork).toBeGreaterThan(0);
     expect(Array.isArray(hotCommits[0].updaterComponentNames)).toBe(true);
+    expect(typeof hotCommits[0].interpretation).toBe('string');
+    expect(hotCommits[0].interpretation.length).toBeGreaterThan(0);
+  });
+
+  it('labels a commit dominated by one component vs. one spread across several', async () => {
+    const content = await readFile(fixturePath, 'utf-8');
+    const profile = parseRenderProfile(content, 'sample-render-profile.json');
+    const hotCommits = getHotCommits(profile, profile.commits.length, 5);
+
+    for (const commit of hotCommits) {
+      const topShare = commit.topComponents[0]?.shareOfCommitWork ?? 0;
+      if (topShare >= 0.5) {
+        expect(commit.interpretation).toContain('dominated by one component');
+      }
+    }
   });
 
   it('compares two render profiles and reports regressions', () => {
