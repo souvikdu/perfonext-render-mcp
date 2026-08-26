@@ -9,11 +9,12 @@
 `perfonext-render-mcp` is a Model Context Protocol (MCP) server that gives GitHub Copilot, Claude Desktop,
 Claude Code, and other MCP clients structured, machine-readable React render analysis for Next.js performance
 work. It turns live capture sessions and React DevTools Profiler exports into component costs, exact rerender
-causes, and regression diffs — evidence Copilot can act on directly.
+causes, and regression diffs — evidence an MCP client can act on directly.
 
 ## Quick Start
 
-Run directly with `npx`:
+`perfonext-render-mcp` is a standard MCP stdio server, so it works with any MCP-compatible client
+(GitHub Copilot in VS Code, Claude Desktop, Claude Code, Cursor, and others). Run it directly with `npx`:
 
 ```bash
 npx -y @perfonext/render-mcp
@@ -27,7 +28,9 @@ npm install -g @perfonext/render-mcp
 
 The executable command remains `perfonext-render-mcp` after installation.
 
-Add the server to VS Code in `.vscode/mcp.json` (the workspace MCP configuration file):
+### VS Code
+
+Add the server to `.vscode/mcp.json` (the workspace MCP configuration file):
 
 ```json
 {
@@ -41,9 +44,67 @@ Add the server to VS Code in `.vscode/mcp.json` (the workspace MCP configuration
 }
 ```
 
-Then reload the VS Code window and run **MCP: List Servers** to start it, or accept the trust prompt when it appears. For a locally-built checkout, point `command`/`args` at `node` and the repo's `dist/index.js` instead.
+Reload the VS Code window and run **MCP: List Servers** to start it, or accept the trust prompt when it appears.
 
-Then ask Copilot: _"Run a render analysis on my app."_
+### Claude Desktop
+
+Add the server to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "perfonext-render": {
+      "command": "npx",
+      "args": ["-y", "@perfonext/render-mcp"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop to pick up the new server.
+
+### Claude Code
+
+Add the server with the CLI:
+
+```bash
+claude mcp add perfonext-render -- npx -y @perfonext/render-mcp
+```
+
+Or add the same `mcpServers` entry to `.mcp.json`.
+
+### Other MCP clients
+
+Any client that supports stdio MCP servers can launch `npx -y @perfonext/render-mcp`. Consult your
+client's documentation for its MCP server configuration format.
+
+For a locally-built checkout, point `command`/`args` at `node` and the repo's `dist/index.js` instead.
+
+## Troubleshooting
+
+### `spawn npx ENOENT` / `spawn node ENOENT` on macOS with nvm
+
+If the server fails to start with this error, your GUI MCP client likely cannot see nvm. GUI apps on
+macOS do not load shell config (`.zshrc`/`.bashrc`), so nvm-installed `npx`/`node` are not on `PATH`.
+Use an absolute `npx` path and include the same Node directory in `PATH`:
+
+```json
+{
+  "servers": {
+    "perfonext-render": {
+      "type": "stdio",
+      "command": "/Users/YOU/.nvm/versions/node/v<version>/bin/npx",
+      "args": ["-y", "@perfonext/render-mcp"],
+      "env": {
+        "PATH": "/Users/YOU/.nvm/versions/node/v<version>/bin:/usr/bin:/bin"
+      }
+    }
+  }
+}
+```
+
+Merge these fields into your client's server entry, under `servers` for VS Code or `mcpServers` for
+Claude Desktop/Code. Then ask your assistant: _"Run a render analysis on my app."_
 
 ## What It Does
 
@@ -53,7 +114,7 @@ machine-readable summaries, exact rerender-cause attribution, source-aware follo
 
 - **collect** — choose live capture (react-scan/lite streams events in real time) or manual DevTools export
 - **analyze** — the MCP returns structured, machine-readable evidence: component costs, rerender causes, commit breakdowns, and regressions
-- **fix** — Copilot uses that evidence to propose and apply concrete code changes
+- **fix** — your MCP client uses that evidence to propose and apply concrete code changes
 
 > **Note:** while a live capture session is active, React DevTools Timeline Profiler will not receive events
 > (react-scan/lite takes over the profiling channel). Calling `stop_render_capture` restores it.
@@ -70,7 +131,7 @@ Capabilities:
 - annotates ranked components with their source file and line when available
 - filters DOM host elements (`div`, `span`, …) and unnamed components out of ranked output so findings stay actionable
 - compares two render profiles to surface regressions and improvements
-- keeps profiles in memory so Copilot can iterate without re-loading
+- keeps profiles in memory so an MCP client can iterate without re-loading
 
 ## Tools
 
@@ -101,13 +162,13 @@ Capabilities:
 
 ## Usage Walkthrough
 
-Ask Copilot: _"Run a render analysis on my app."_
+Ask your assistant: _"Run a render analysis on my app."_
 
-Copilot calls `begin_render_analysis` and asks you to choose:
+Your MCP client calls `begin_render_analysis` and asks you to choose:
 
 **Option A — Live capture (recommended)**
 
-Copilot will:
+Your MCP client will:
 
 1. Start a capture session (ingest server on `127.0.0.1:7721`)
 2. Install `react-scan` as a devDependency if not present
@@ -140,9 +201,9 @@ The ingest server runs on a **fixed port (7721)**. Only the `sessionId` line in 
 1. Open React DevTools in the browser → Profiler tab → Record
 2. Interact with the app
 3. Export the JSON and share the file path
-4. Copilot calls `load_render_profile({ filePath: "..." })`
+4. Your MCP client calls `load_render_profile({ filePath: "..." })`
 
-## Example Copilot Prompts
+## Example Prompts
 
 - "Run a render analysis on my app."
 - "Stop the capture and show me the slowest components."
