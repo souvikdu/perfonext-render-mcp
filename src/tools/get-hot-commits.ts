@@ -51,6 +51,7 @@ export function registerGetHotCommits(server: McpServer): void {
         return {
           ...rest,
           duration: formatMs(commit.duration),
+          totalSelfDuration: formatMs(commit.totalSelfDuration),
           totalActualDuration: formatMs(commit.totalActualDuration),
           topComponents: commit.topComponents.map((component) => ({
             ...component,

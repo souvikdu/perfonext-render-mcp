@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-08-29
+
+### Fixed
+
+- Live render captures now calculate component self time from fibers that actually rendered in each commit, excluding stale bailed-out durations and avoiding inflated commit and component totals.
+- Render self-time totals now partition each commit, so hot-commit shares and slow-component rankings reflect actual committed work instead of repeated ancestor durations.
+
 ## [0.4.1] - 2026-08-27
 
 ### Changed

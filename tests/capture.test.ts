@@ -190,10 +190,10 @@ describe('ingest server — HTTP endpoint', () => {
     expect(body.ok).toBe(true);
     expect(body.received).toBe(1);
     expect(session.commits).toHaveLength(1);
-    // Verify normalization: selfBaseDuration → selfDuration, state boolean → ['state']
+    // Verify normalization: self time derived from the tree, state boolean → ['state']
     const stored = session.commits[0];
     expect(stored.fibers).toHaveLength(2);
-    expect(stored.fibers[0].selfDuration).toBe(3); // from selfBaseDuration
+    expect(stored.fibers[0].selfDuration).toBe(3); // Button 8 - Icon 5
     expect(stored.fibers[0].changeDescription?.isFirstMount).toBe(false);
     expect(stored.duration).toBe(8); // root fiber (depth=0) actualDuration
   });
@@ -373,11 +373,20 @@ describe('adaptReactScanEvents', () => {
     expect(m0.componentName).toBe('Button');
     expect(m0.phase).toBe('update'); // isFirstMount: false
     expect(m0.actualDuration).toBe(8);
-    expect(m0.selfDuration).toBe(3); // from selfBaseDuration
+    expect(m0.selfDuration).toBe(3); // Button 8 - Icon 5
 
     expect(m1.componentName).toBe('Icon');
     expect(m1.phase).toBe('mount'); // isFirstMount: true
     expect(m1.actualDuration).toBe(5);
+  });
+
+  it('reports totalRenderDuration as real work, never more than the time committed', async () => {
+    const profile = await captureAndAdapt([makeCommit(), makeCommit()]);
+
+    // Self times partition each commit, so the session total cannot exceed the
+    // time React actually spent committing — inclusive durations would double-count
+    // every ancestor and report a multiple of it.
+    expect(profile.totalRenderDuration).toBe(profile.totalCommitDuration);
   });
 
   it('deduplicates fiberNodes across commits', async () => {
@@ -445,14 +454,14 @@ describe('adaptReactScanEvents', () => {
     // Assert on the normalized session commit — state:true → ['state'], hooks:[0,2] → ['hook[0]','hook[2]']
     const fiber = session.commits[0].fibers[0];
     expect(fiber.name).toBe('Counter');
-    expect(fiber.selfDuration).toBe(4); // selfBaseDuration → selfDuration
+    expect(fiber.selfDuration).toBe(4); // leaf root: all of its actualDuration is self time
     expect(fiber.changeDescription?.state).toEqual(['state']); // true → ['state']
     expect(fiber.changeDescription?.hooks).toEqual(['hook[0]', 'hook[2]']); // indices → names
     expect(fiber.changeDescription?.context).toBeNull(); // false → null
     expect(fiber.changeDescription?.props).toBeNull();
   });
 
-  it('clamps selfDuration to actualDuration when selfBaseDuration overshoots it', async () => {
+  it('derives self time from the fiber tree so self durations partition the commit', async () => {
     const session = await createCaptureSession();
     const port = requireServerPort();
 
@@ -465,24 +474,28 @@ describe('adaptReactScanEvents', () => {
         timestamp: 1000,
         data: {
           rendererId: 1,
+          // App(12) -> [ List(7) -> [ Row(3) -> [ Deep(2) ] ], Footer(1), Stale(50) ]
+          // Deep is reported at depth 4, not 3: depth is the depth in the full tree.
+          // Stale bailed out — its actualStartTime predates the render pass, so its
+          // actualDuration is left over from an earlier commit and must be ignored.
+          // selfBaseDuration is deliberately wrong here — it is an unmemoized base
+          // estimate, so summing it would report 24ms of work in a 12ms commit.
           tree: [
-            {
-              fiberId: 20,
-              name: 'Overreporting',
-              depth: 0,
-              actualDuration: 2,
-              selfBaseDuration: 5, // selfBaseDuration can overshoot actualDuration in practice
-              changeDescription: null,
-              source: null,
-            },
+            { fiberId: 20, name: 'App', depth: 0, actualDuration: 12, actualStartTime: 100, selfBaseDuration: 11 }, // prettier-ignore
+            { fiberId: 21, name: 'List', depth: 1, actualDuration: 7, actualStartTime: 101, selfBaseDuration: 7 }, // prettier-ignore
+            { fiberId: 22, name: 'Row', depth: 2, actualDuration: 3, actualStartTime: 102, selfBaseDuration: 3 }, // prettier-ignore
+            { fiberId: 23, name: 'Deep', depth: 4, actualDuration: 2, actualStartTime: 103, selfBaseDuration: 2 }, // prettier-ignore
+            { fiberId: 24, name: 'Footer', depth: 1, actualDuration: 1, actualStartTime: 104, selfBaseDuration: 1 }, // prettier-ignore
+            { fiberId: 25, name: 'Stale', depth: 1, actualDuration: 50, actualStartTime: 5, selfBaseDuration: 50 }, // prettier-ignore
           ],
         },
       }),
     });
 
-    const fiber = session.commits[0].fibers[0];
-    expect(fiber.actualDuration).toBe(2);
-    expect(fiber.selfDuration).toBe(2); // clamped, never exceeds actualDuration
+    const commit = session.commits[0];
+    const selfByName = Object.fromEntries(commit.fibers.map((f) => [f.name, f.selfDuration]));
+    expect(selfByName).toEqual({ App: 4, List: 4, Row: 1, Deep: 2, Footer: 1, Stale: 0 });
+    expect(commit.fibers.reduce((sum, f) => sum + (f.selfDuration ?? 0), 0)).toBe(commit.duration);
   });
 
   it('sums all depth-0 fibers into commit duration instead of using only the first', async () => {

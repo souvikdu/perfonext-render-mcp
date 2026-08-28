@@ -47,6 +47,7 @@ export function registerGetSlowComponents(server: McpServer): void {
       ).map((component, index) => ({
         rank: index + 1,
         ...component,
+        totalSelfDuration: formatMs(component.totalSelfDuration),
         totalActualDuration: formatMs(component.totalActualDuration),
         averageActualDuration: formatMs(component.averageActualDuration),
         maxActualDuration: formatMs(component.maxActualDuration),

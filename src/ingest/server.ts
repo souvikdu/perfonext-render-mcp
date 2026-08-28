@@ -25,6 +25,7 @@ export interface ReactScanFiberEvent {
   name: string;
   depth: number;
   actualDuration: number;
+  actualStartTime: number;
   selfDuration?: number;
   changeDescription?: ReactScanChangeDescription | null;
   source?: ReactScanSource | null;
@@ -56,7 +57,7 @@ interface RawFiber {
   depth?: unknown;
   tag?: unknown;
   actualDuration?: unknown;
-  selfBaseDuration?: unknown;
+  actualStartTime?: unknown;
   fiberId?: unknown;
   source?: unknown;
   ownerName?: unknown;
@@ -78,15 +79,13 @@ function toFiniteDuration(value: unknown): number {
 function normalizeFiber(raw: RawFiber): ReactScanFiberEvent {
   const cd = raw.changeDescription ?? null;
   const actualDuration = toFiniteDuration(raw.actualDuration);
-  const rawSelfDuration = toFiniteDuration(raw.selfBaseDuration);
   return {
     fiberId: typeof raw.fiberId === 'number' ? raw.fiberId : 0,
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : '(anonymous)',
     depth: typeof raw.depth === 'number' ? raw.depth : 0,
     actualDuration,
-    // selfBaseDuration is measured independently of actualDuration and can exceed
-    // it in practice; clamp so self-cost ratios derived downstream stay <= 1.
-    selfDuration: Math.min(rawSelfDuration, actualDuration),
+    actualStartTime: toFiniteDuration(raw.actualStartTime),
+    selfDuration: 0, // filled in by assignSelfDurations, which needs the sibling context
     changeDescription:
       cd != null
         ? {
@@ -101,6 +100,46 @@ function normalizeFiber(raw: RawFiber): ReactScanFiberEvent {
     source: raw.source && typeof raw.source === 'object' ? (raw.source as ReactScanSource) : null,
     parentId: null,
   };
+}
+
+/**
+ * react-scan/lite streams the whole fiber tree flattened in DFS pre-order, so a fiber's
+ * parent is the nearest preceding entry at a smaller depth. Self time is the fiber's own
+ * work: actualDuration minus its direct children's.
+ *
+ * Only fibers that rendered in this commit count. React leaves actualDuration stale on
+ * fibers that bailed out, and those values belong to earlier commits — subtracting them
+ * would overstate self time, and React's selfBaseDuration is an unmemoized base estimate
+ * that does not add up to the commit either. A fiber rendered in this commit iff its
+ * actualStartTime is at or after the root's, since the root begins the render pass first.
+ */
+function assignSelfDurations(fibers: ReactScanFiberEvent[]): void {
+  if (fibers.length === 0) return;
+
+  const renderPassStart = fibers[0].actualStartTime;
+  const childDuration = new Array<number>(fibers.length).fill(0);
+  const openAncestors: number[] = [];
+
+  fibers.forEach((fiber, index) => {
+    while (
+      openAncestors.length > 0 &&
+      fibers[openAncestors[openAncestors.length - 1]].depth >= fiber.depth
+    ) {
+      openAncestors.pop();
+    }
+    const parent = openAncestors[openAncestors.length - 1];
+    if (parent !== undefined && fiber.actualStartTime >= renderPassStart) {
+      childDuration[parent] += fiber.actualDuration;
+    }
+    openAncestors.push(index);
+  });
+
+  fibers.forEach((fiber, index) => {
+    fiber.selfDuration =
+      fiber.actualStartTime >= renderPassStart
+        ? Math.max(0, fiber.actualDuration - childDuration[index])
+        : 0;
+  });
 }
 
 function parseOneEvent(
@@ -120,6 +159,7 @@ function parseOneEvent(
     if (r.message === 'commit') {
       const tree = Array.isArray(data.tree) ? (data.tree as RawFiber[]) : [];
       const fibers = tree.map(normalizeFiber);
+      assignSelfDurations(fibers);
       // A commit can report more than one depth-0 fiber (independent root subtrees,
       // e.g. a layout boundary alongside a page boundary) — sum them all rather than
       // taking only the first, which silently dropped the rest of the committed work.
