@@ -84,6 +84,7 @@ export interface RenderSummaryEntry {
   updateCount: number;
   nestedUpdateCount: number;
   totalActualDuration: number;
+  totalSelfDuration: number;
   averageActualDuration: number;
   maxActualDuration: number;
   commitCount: number;
@@ -102,6 +103,7 @@ export interface HotCommitSummary {
   commitIndex: number;
   rootId: number;
   duration: number;
+  totalSelfDuration: number;
   totalActualDuration: number;
   timestamp: number;
   priorityLevel: string | null;

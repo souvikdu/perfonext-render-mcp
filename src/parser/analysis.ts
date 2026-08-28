@@ -81,6 +81,10 @@ function getSeverityRank(severity: RenderIssueSeverity): number {
   return 1;
 }
 
+function getCommitSelfDuration(measurements: RenderMeasurement[]): number {
+  return measurements.reduce((sum, measurement) => sum + measurement.selfDuration, 0);
+}
+
 function getMeasurementsTotalActualDuration(measurements: RenderMeasurement[]): number {
   return measurements.reduce((sum, measurement) => sum + measurement.actualDuration, 0);
 }
@@ -100,7 +104,7 @@ function getMeasurementMap(commit: RenderCommit): Map<number, RenderMeasurement>
 
 function getCommitTopComponents(commit: RenderCommit, limit: number): HotCommitComponentSummary[] {
   const components = new Map<string, HotCommitComponentSummary>();
-  const totalActualDuration = getMeasurementsTotalActualDuration(commit.measurements);
+  const totalCommitSelfDuration = getCommitSelfDuration(commit.measurements);
 
   for (const measurement of commit.measurements) {
     const existing = components.get(measurement.componentName) ?? {
@@ -119,12 +123,12 @@ function getCommitTopComponents(commit: RenderCommit, limit: number): HotCommitC
 
   return Array.from(components.values())
     .filter((component) => isAnalyzableComponent(component.componentName))
-    .sort((left, right) => right.actualDuration - left.actualDuration)
+    .sort((left, right) => right.selfDuration - left.selfDuration)
     .slice(0, limit)
     .map((component) => ({
       ...component,
       shareOfCommitWork:
-        totalActualDuration > 0 ? component.actualDuration / totalActualDuration : 0,
+        totalCommitSelfDuration > 0 ? component.selfDuration / totalCommitSelfDuration : 0,
     }));
 }
 
@@ -166,6 +170,7 @@ export function getHotCommits(
         commitIndex: commit.index,
         rootId: commit.rootId,
         duration: commit.duration,
+        totalSelfDuration: getCommitSelfDuration(commit.measurements),
         totalActualDuration: getMeasurementsTotalActualDuration(commit.measurements),
         timestamp: commit.timestamp,
         priorityLevel: commit.priorityLevel,
@@ -259,7 +264,7 @@ export function getSlowComponents(
     .filter(
       (component) =>
         isAnalyzableComponent(component.componentName) &&
-        component.totalActualDuration >= minDuration,
+        component.totalSelfDuration >= minDuration,
     )
     .map((component) => ({
       componentName: component.componentName,
@@ -268,6 +273,7 @@ export function getSlowComponents(
       updateCount: component.updateCount,
       nestedUpdateCount: component.nestedUpdateCount,
       totalActualDuration: component.totalActualDuration,
+      totalSelfDuration: component.totalSelfDuration,
       averageActualDuration:
         component.renderCount > 0 ? component.totalActualDuration / component.renderCount : 0,
       maxActualDuration: component.maxActualDuration,
@@ -280,7 +286,7 @@ export function getSlowComponents(
   } else if (sortBy === 'max') {
     entries.sort((a, b) => b.maxActualDuration - a.maxActualDuration);
   } else {
-    entries.sort((a, b) => b.totalActualDuration - a.totalActualDuration);
+    entries.sort((a, b) => b.totalSelfDuration - a.totalSelfDuration);
   }
 
   return entries.slice(0, limit);

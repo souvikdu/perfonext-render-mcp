@@ -212,7 +212,7 @@ export function adaptReactScanEvents(
   }
   const totalCommitDuration = commits.reduce((sum, c) => sum + c.duration, 0);
   const totalRenderDuration = commits.reduce(
-    (sum, c) => sum + c.measurements.reduce((ms, m) => ms + m.actualDuration, 0),
+    (sum, c) => sum + c.measurements.reduce((ms, m) => ms + m.selfDuration, 0),
     0,
   );
 

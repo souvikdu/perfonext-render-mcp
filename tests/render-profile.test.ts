@@ -47,19 +47,19 @@ describe('render profile parser', () => {
 });
 
 describe('render profile analysis', () => {
-  it('returns a summary sorted by total actual duration', async () => {
+  it('returns a summary sorted by total self duration', async () => {
     const content = await readFile(fixturePath, 'utf-8');
     const profile = parseRenderProfile(content, 'sample-render-profile.json');
     const summary = getRenderSummary(profile, 3);
 
     expect(summary.commitCount).toBe(3);
     expect(summary.topComponents[0].componentName).toBe('ProductList');
-    expect(summary.topComponents[0].totalActualDuration).toBeGreaterThanOrEqual(
-      summary.topComponents[1].totalActualDuration,
+    expect(summary.topComponents[0].totalSelfDuration).toBeGreaterThanOrEqual(
+      summary.topComponents[1].totalSelfDuration,
     );
     expect(summary.hotCommits[0].commitIndex).toBe(0);
     expect(summary.hotCommits[0].topComponents.length).toBeGreaterThan(0);
-    expect(summary.hotCommits[0].topComponents[0].componentName).toBe('App');
+    expect(summary.hotCommits[0].topComponents[0].componentName).toBe('ProductList');
     expect(Array.isArray(summary.issues)).toBe(true);
   });
 
@@ -103,6 +103,17 @@ describe('render profile analysis', () => {
       if (topShare >= 0.5) {
         expect(commit.interpretation).toContain('dominated by one component');
       }
+    }
+  });
+
+  it('satisfies share of commit work invariants', async () => {
+    const content = await readFile(fixturePath, 'utf-8');
+    const profile = parseRenderProfile(content, 'sample-render-profile.json');
+    const hotCommits = getHotCommits(profile, profile.commits.length, 10);
+
+    for (const commit of hotCommits) {
+      const totalShare = commit.topComponents.reduce((sum, c) => sum + c.shareOfCommitWork, 0);
+      expect(totalShare).toBeCloseTo(1, 4);
     }
   });
 

@@ -61,6 +61,7 @@ export function registerGetRenderSummary(server: McpServer): void {
                 totalRenderDuration: formatMs(summary.totalRenderDuration),
                 topComponents: summary.topComponents.map((component) => ({
                   ...component,
+                  totalSelfDuration: formatMs(component.totalSelfDuration),
                   totalActualDuration: formatMs(component.totalActualDuration),
                   averageActualDuration: formatMs(component.averageActualDuration),
                   maxActualDuration: formatMs(component.maxActualDuration),
@@ -68,6 +69,7 @@ export function registerGetRenderSummary(server: McpServer): void {
                 hotCommits: summary.hotCommits.map((commit) => ({
                   ...commit,
                   duration: formatMs(commit.duration),
+                  totalSelfDuration: formatMs(commit.totalSelfDuration),
                   totalActualDuration: formatMs(commit.totalActualDuration),
                   topComponents: commit.topComponents.map((component) => ({
                     ...component,
