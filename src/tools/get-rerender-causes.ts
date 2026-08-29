@@ -55,7 +55,12 @@ export function registerGetRerenderCauses(server: McpServer): void {
                 note: qualityNote,
                 scoreDocumentation: {
                   meaning:
-                    '0-10 rerender risk score. Factors: update frequency, nested updates, commit spread, self-intensive render, average render duration.',
+                    '0-10 rerender risk score. Frequency signals (update count, nested ' +
+                    'updates, commit spread, self-intensive render) are scaled by the share ' +
+                    'of total session render self-time the component accounts for, so a ' +
+                    'component that is cheap relative to the session scores low however ' +
+                    'often it rerenders. Causes are ordered by this score, and scoreBand ' +
+                    'is derived from it alone.',
                   thresholds: { low: '0.0-2.9', medium: '3.0-5.9', high: '6.0-10.0' },
                 },
                 causes,

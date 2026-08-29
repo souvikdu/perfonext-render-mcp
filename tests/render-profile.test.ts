@@ -335,11 +335,14 @@ describe('render profile analysis', () => {
 // ---------------------------------------------------------------------------
 
 /** Builds a minimal profile with `totalCommits` commits, where the tracked component
- *  renders in the first `appearances` of them (defaults to every commit). */
+ *  renders in the first `appearances` of them (defaults to every commit).
+ *  `backgroundDuration` adds render self-time from an unrelated component so the
+ *  tracked component's share of session render work can be varied. */
 function buildSyntheticProfile(
   totalCommits: number,
   totalActualDuration: number,
   appearances: number = totalCommits,
+  backgroundDuration = 0,
 ) {
   if (appearances < 1) {
     throw new Error('buildSyntheticProfile requires appearances >= 1');
@@ -372,6 +375,34 @@ function buildSyntheticProfile(
     updaterComponentNames: [],
   }));
 
+  const components = [
+    {
+      componentName: 'Chatty',
+      renderCount: appearances,
+      mountCount: 0,
+      updateCount: appearances,
+      nestedUpdateCount: 0,
+      totalActualDuration,
+      totalSelfDuration: totalActualDuration,
+      maxActualDuration: perRenderDuration,
+      commitIndices: commits.slice(0, appearances).map((c) => c.index),
+    },
+  ];
+
+  if (backgroundDuration > 0) {
+    components.push({
+      componentName: 'Bulk',
+      renderCount: 1,
+      mountCount: 1,
+      updateCount: 0,
+      nestedUpdateCount: 0,
+      totalActualDuration: backgroundDuration,
+      totalSelfDuration: backgroundDuration,
+      maxActualDuration: backgroundDuration,
+      commitIndices: [0],
+    });
+  }
+
   return {
     id: 'synthetic',
     filename: 'synthetic',
@@ -379,41 +410,49 @@ function buildSyntheticProfile(
     rendererId: 1,
     commits,
     fiberNodes: [],
-    components: [
-      {
-        componentName: 'Chatty',
-        renderCount: appearances,
-        mountCount: 0,
-        updateCount: appearances,
-        nestedUpdateCount: 0,
-        totalActualDuration,
-        totalSelfDuration: totalActualDuration,
-        maxActualDuration: perRenderDuration,
-        commitIndices: commits.slice(0, appearances).map((c) => c.index),
-      },
-    ],
+    components,
     totalCommitDuration: commits.reduce((s, c) => s + c.duration, 0),
-    totalRenderDuration: totalActualDuration,
+    totalRenderDuration: totalActualDuration + backgroundDuration,
     hasChangeDescriptions: false,
   };
 }
 
-describe('getRerenderCauses — severity tied to absolute cost', () => {
-  it('does not label a high-frequency, negligible-cost component as high severity', () => {
-    // 15 renders, 100% updates, present in every commit, but only 3.3ms total —
-    // the exact shape that previously scored ~7.0/"high" on frequency alone.
-    const profile = buildSyntheticProfile(15, 3.3);
+describe('getRerenderCauses — score, band and ordering', () => {
+  it('does not band a component that is a negligible share of session render work as high', () => {
+    // Full marks on every frequency signal, but 3.3ms against 500ms of session work.
+    const profile = buildSyntheticProfile(15, 3.3, 15, 500);
     const [cause] = getRerenderCauses(profile, 1);
 
-    expect(cause.score).toBeGreaterThanOrEqual(6); // frequency signals still score high
-    expect(cause.scoreBand).not.toBe('high'); // but absolute cost is too small for "high"
+    expect(cause.scoreBand).not.toBe('high');
+    expect(cause.score).toBeLessThan(6);
   });
 
-  it('labels a high-frequency, high-cost component as high severity', () => {
+  it('bands a high-frequency component that dominates session render work as high', () => {
     const profile = buildSyntheticProfile(15, 17.4);
     const [cause] = getRerenderCauses(profile, 1);
 
     expect(cause.scoreBand).toBe('high');
+  });
+
+  it('derives scoreBand from score alone, with no hidden duration gate', () => {
+    // NR-1: equal scores banded differently via an undocumented absolute gate.
+    const profile = buildSyntheticProfile(15, 17.4, 15, 40);
+    const causes = getRerenderCauses(profile, 10);
+
+    expect(causes.length).toBeGreaterThan(0);
+    for (const cause of causes) {
+      const expected = cause.score >= 6 ? 'high' : cause.score >= 3 ? 'medium' : 'low';
+      expect(cause.scoreBand).toBe(expected);
+    }
+  });
+
+  it('ranks an expensive component above a cheap one with identical frequency signals', () => {
+    const cheap = buildSyntheticProfile(15, 0.1, 15, 100);
+    const expensive = buildSyntheticProfile(15, 50, 15, 100);
+
+    expect(getRerenderCauses(cheap, 1)[0].score).toBeLessThan(
+      getRerenderCauses(expensive, 1)[0].score,
+    );
   });
 
   it('scales the wide-commit-spread threshold to the profile commit count', () => {
