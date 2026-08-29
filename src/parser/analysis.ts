@@ -17,18 +17,17 @@ import type {
   RerenderScoreBand,
 } from './types.js';
 
-// Frequency-based signals (update count, commit spread, self-intensive ratio) can
-// score "high" even for a component whose total render cost is a few milliseconds.
-// Severity should require both a high score AND a meaningful absolute cost.
-const HIGH_SEVERITY_MIN_DURATION_MS = 5;
-const MEDIUM_SEVERITY_MIN_DURATION_MS = 1;
+// Share of session render self-time at which a component's frequency signals carry
+// full weight. Below it the score scales down, so cost is part of the score itself
+// rather than a hidden gate applied after the fact.
+const COST_SATURATION_SHARE = 0.1;
 
-function getScoreBand(score: number, totalActualDuration: number): RerenderScoreBand {
-  if (score >= 6 && totalActualDuration >= HIGH_SEVERITY_MIN_DURATION_MS) {
+function getScoreBand(score: number): RerenderScoreBand {
+  if (score >= 6) {
     return 'high';
   }
 
-  if (score >= 3 && totalActualDuration >= MEDIUM_SEVERITY_MIN_DURATION_MS) {
+  if (score >= 3) {
     return 'medium';
   }
 
@@ -318,8 +317,6 @@ export function getRerenderCauses(
         component.totalActualDuration > 0
           ? component.totalSelfDuration / component.totalActualDuration
           : 0;
-      const avgDuration =
-        component.renderCount > 0 ? component.totalActualDuration / component.renderCount : 0;
 
       // ── Exact path: use changeDescription data when available ──────────────
       const cc = component.changeCauses;
@@ -418,24 +415,28 @@ export function getRerenderCauses(
         });
       }
 
-      // Score: update count (capped) + nested updates + commit spread + self-intensive + avg duration factor
-      const score = Math.min(
-        10,
-        Number(
-          (
-            Math.min(3, component.updateCount) +
-            Math.min(3, component.nestedUpdateCount * 1.5) +
-            (component.commitIndices.length >= wideSpreadThreshold
-              ? 2
-              : component.commitIndices.length >= Math.max(2, wideSpreadThreshold - 1)
-                ? 1
-                : 0) +
-            (selfToActualRatio >= 0.9 ? 2 : selfToActualRatio >= 0.75 ? 1 : 0) +
-            Math.min(2, avgDuration / 10)
-          ) // up to +2 for components averaging ≥20ms per render
-            .toFixed(1),
-        ),
-      );
+      // How avoidable the rerenders look, on its own spanning the full 0-10 range.
+      const frequencyScore =
+        Math.min(3, component.updateCount) +
+        Math.min(3, component.nestedUpdateCount * 1.5) +
+        (component.commitIndices.length >= wideSpreadThreshold
+          ? 2
+          : component.commitIndices.length >= Math.max(2, wideSpreadThreshold - 1)
+            ? 1
+            : 0) +
+        (selfToActualRatio >= 0.9 ? 2 : selfToActualRatio >= 0.75 ? 1 : 0);
+
+      // Scaled by what those rerenders cost, so frequency alone cannot rank a cheap
+      // component above an expensive one. profile.totalRenderDuration sums self time.
+      const costWeight =
+        profile.totalRenderDuration > 0
+          ? Math.min(
+              1,
+              component.totalSelfDuration / profile.totalRenderDuration / COST_SATURATION_SHARE,
+            )
+          : 1;
+
+      const score = Number(Math.min(10, frequencyScore * costWeight).toFixed(1));
 
       const result: RerenderCause = {
         componentName: component.componentName,
@@ -444,7 +445,7 @@ export function getRerenderCauses(
         nestedUpdateCount: component.nestedUpdateCount,
         totalActualDuration: component.totalActualDuration,
         score,
-        scoreBand: getScoreBand(score, component.totalActualDuration),
+        scoreBand: getScoreBand(score),
         confidence: getConfidence(
           evidence.filter((item) => item.signal !== 'limited-export-evidence').length,
         ),

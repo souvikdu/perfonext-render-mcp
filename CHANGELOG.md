@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-08-29
+
+### Changed
+
+- `get_rerender_causes` now folds render cost into `score` itself: frequency signals are scaled by the component's share of total session render self-time, replacing the weak average-duration term. `scoreBand` is derived from `score` alone, so it can no longer contradict the published `scoreDocumentation.thresholds`, and the score-descending ordering no longer promotes sub-millisecond components.
+
+### Removed
+
+- The undocumented absolute duration gates that `scoreBand` applied on top of `score`.
+
 ## [0.4.2] - 2026-08-29
 
 ### Fixed
