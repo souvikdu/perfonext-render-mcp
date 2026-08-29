@@ -22,6 +22,11 @@ import type {
 // rather than a hidden gate applied after the fact.
 const COST_SATURATION_SHARE = 0.1;
 
+// One frame at 60fps. A commit faster than this cannot drop a frame, so being 1.5x the average
+// is arithmetic, not a performance problem — without this floor every healthy session reports
+// spikes purely because some commit has to be above the mean.
+const COMMIT_SPIKE_FLOOR_MS = 16;
+
 function getScoreBand(score: number): RerenderScoreBand {
   if (score >= 6) {
     return 'high';
@@ -651,7 +656,11 @@ export function detectRenderIssues(profile: ParsedRenderProfile, limit = 10): Re
   }
 
   for (const commit of getHotCommits(profile, Math.min(5, profile.commits.length), 3)) {
-    if (averageCommitDuration > 0 && commit.duration >= averageCommitDuration * 1.5) {
+    if (
+      averageCommitDuration > 0 &&
+      commit.duration >= COMMIT_SPIKE_FLOOR_MS &&
+      commit.duration >= averageCommitDuration * 1.5
+    ) {
       const topShare = commit.topComponents[0]?.shareOfCommitWork ?? 0;
       issues.push({
         type: 'commit-spike',
@@ -663,7 +672,9 @@ export function detectRenderIssues(profile: ParsedRenderProfile, limit = 10): Re
           {
             signal: 'commit-duration-spike',
             observed: Number(commit.duration.toFixed(2)),
-            threshold: Number((averageCommitDuration * 1.5).toFixed(2)),
+            threshold: Number(
+              Math.max(COMMIT_SPIKE_FLOOR_MS, averageCommitDuration * 1.5).toFixed(2),
+            ),
             detail: `Commit ${commit.commitIndex} exceeded the average commit duration by ${Number((commit.duration / averageCommitDuration).toFixed(2))}x.`,
           },
         ],
