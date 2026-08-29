@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   compareRenders,
+  detectRenderIssues,
   getHotCommits,
   getRenderSummary,
   getRerenderCauses,
@@ -565,5 +566,81 @@ describe('getRenderSummary — minified-name detection', () => {
 
     const summary = getRenderSummary(profile);
     expect(summary.warnings.some((w) => w.includes('look minified'))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectRenderIssues — commit-spike floor
+// ---------------------------------------------------------------------------
+
+/** Builds a profile whose commits have exactly the given durations, each attributed
+ *  to a single component, so commit-spike detection can be driven directly. */
+function buildProfileWithCommitDurations(durations: number[]): ParsedRenderProfile {
+  const commits = durations.map((duration, index) => ({
+    index,
+    rootId: 1,
+    duration,
+    timestamp: index * 100,
+    priorityLevel: 'Normal',
+    measurements: [
+      {
+        fiberId: 1,
+        rootId: 1,
+        componentName: 'Widget',
+        phase: 'update' as const,
+        actualDuration: duration,
+        selfDuration: duration,
+        startTime: index * 100,
+        commitTime: index * 100,
+        renderCount: 1,
+        commitIndex: index,
+        isNestedUpdate: false,
+      },
+    ],
+    updaterComponentNames: [],
+  }));
+
+  return {
+    id: 'synthetic-commits',
+    filename: 'synthetic-commits',
+    version: '5',
+    rendererId: 1,
+    commits,
+    fiberNodes: [],
+    components: [
+      buildComponent(
+        'Widget',
+        durations.reduce((sum, duration) => sum + duration, 0),
+        commits.map((commit) => commit.index),
+      ),
+    ],
+    totalCommitDuration: durations.reduce((sum, duration) => sum + duration, 0),
+    totalRenderDuration: durations.reduce((sum, duration) => sum + duration, 0),
+    hasChangeDescriptions: false,
+  };
+}
+
+describe('detectRenderIssues — commit-spike', () => {
+  it('reports no spike when every commit is under one frame', () => {
+    // 4ms is 1.7x the 2.33ms average, but nothing here can drop a frame.
+    const issues = detectRenderIssues(buildProfileWithCommitDurations([1, 2, 4]));
+
+    expect(issues.some((issue) => issue.type === 'commit-spike')).toBe(false);
+  });
+
+  it('reports a spike when a commit is both above the frame budget and above the average', () => {
+    const issues = detectRenderIssues(buildProfileWithCommitDurations([4, 4, 40]));
+    const spike = issues.find((issue) => issue.type === 'commit-spike');
+
+    expect(spike).toBeDefined();
+    expect(spike!.commitIndex).toBe(2);
+    expect(spike!.evidence[0].threshold).toBe(24);
+  });
+
+  it('reports the frame budget as the threshold when the average is very low', () => {
+    const issues = detectRenderIssues(buildProfileWithCommitDurations([0.5, 0.5, 20]));
+    const spike = issues.find((issue) => issue.type === 'commit-spike');
+
+    expect(spike!.evidence[0].threshold).toBe(16);
   });
 });

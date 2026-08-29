@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-08-29
+
+### Fixed
+
+- `commit-spike` issues now require a commit to exceed a 16ms frame budget in addition to being 1.5x the session average. A purely relative threshold meant every profile reported a spike, including sessions where the slowest commit was a fraction of a frame. The reported `threshold` is the effective one, whichever bound binds.
+
 ## [0.4.3] - 2026-08-29
 
 ### Changed
