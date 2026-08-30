@@ -180,7 +180,11 @@ export function getHotCommits(
         priorityLevel: commit.priorityLevel,
         measurementCount: commit.measurements.length,
         topComponents,
-        updaterComponentNames: commit.updaterComponentNames,
+        // Omitted when empty: react-scan/lite live capture never reports updaters, and an
+        // empty array reads as "nothing triggered this commit" rather than "not recorded".
+        ...(commit.updaterComponentNames.length > 0
+          ? { updaterComponentNames: commit.updaterComponentNames }
+          : {}),
         interpretation: getConcentrationInterpretation(topComponents),
       };
     })
@@ -237,7 +241,8 @@ export function getRenderSummary(
         'This is expected when capturing against `next build --profile` — production minification strips ' +
         "displayName info regardless of the profiling flag, so findings naming these components aren't " +
         "actionable as-is. If you don't need production-accurate timings, capture against `next dev` instead " +
-        "for real names; otherwise check each entry's `source` field (if present) to map back to a file.",
+        'for real names; otherwise re-run the capture with `includeFiberSource: true` (see begin_render_analysis), ' +
+        "which populates each entry's `source` field so minified names can be mapped back to a file.",
     );
   }
 
@@ -262,13 +267,15 @@ export function getSlowComponents(
   profile: ParsedRenderProfile,
   limit = 10,
   sortBy: 'total' | 'average' | 'max' = 'total',
-  minDuration = 0,
+  minSelfDuration = 0,
 ): RenderSummaryEntry[] {
   const entries: RenderSummaryEntry[] = profile.components
     .filter(
       (component) =>
         isAnalyzableComponent(component.componentName) &&
-        component.totalSelfDuration >= minDuration,
+        // A component that cost nothing measurable should not occupy a ranked slot
+        (component.totalSelfDuration > 0 || component.totalActualDuration > 0) &&
+        component.totalSelfDuration >= minSelfDuration,
     )
     .map((component) => ({
       componentName: component.componentName,
@@ -299,7 +306,7 @@ export function getSlowComponents(
 export function getRerenderCauses(
   profile: ParsedRenderProfile,
   limit = 10,
-  minDuration = 0,
+  minActualDuration = 0,
 ): RerenderCause[] {
   const commitCount = profile.commits.length;
   // A component present in a majority of commits indicates sustained rerender
@@ -314,7 +321,7 @@ export function getRerenderCauses(
       (component) =>
         isAnalyzableComponent(component.componentName) &&
         (component.updateCount > 0 || component.nestedUpdateCount > 0) &&
-        component.totalActualDuration >= minDuration,
+        component.totalActualDuration >= minActualDuration,
     )
     .map((component) => {
       const evidence: RerenderEvidence[] = [];

@@ -21,23 +21,25 @@ export function registerGetRerenderCauses(server: McpServer): void {
           .max(25)
           .optional()
           .describe('How many components to include. Defaults to 10.'),
-        minDuration: z
+        minActualDuration: z
           .number()
           .nonnegative()
           .optional()
           .describe(
-            'Minimum total actual duration in ms for a component to appear. Filters sub-millisecond noise. Defaults to 0.',
+            'Minimum total actual duration in ms for a component to appear — render time including its children, the same metric this tool ranks cost by. Filters sub-millisecond noise. Defaults to 0.',
           ),
       },
     },
-    async ({ profileId, limit, minDuration }) => {
+    async ({ profileId, limit, minActualDuration }) => {
       const profile = requireRenderProfile(profileId);
 
-      const causes = getRerenderCauses(profile, limit ?? 10, minDuration ?? 0).map((cause) => ({
-        ...cause,
-        score: Number(cause.score.toFixed(1)),
-        totalActualDuration: formatMs(cause.totalActualDuration),
-      }));
+      const causes = getRerenderCauses(profile, limit ?? 10, minActualDuration ?? 0).map(
+        (cause) => ({
+          ...cause,
+          score: Number(cause.score.toFixed(1)),
+          totalActualDuration: formatMs(cause.totalActualDuration),
+        }),
+      );
 
       const dataQuality = profile.hasChangeDescriptions ? 'exact' : 'heuristic';
       const qualityNote = profile.hasChangeDescriptions

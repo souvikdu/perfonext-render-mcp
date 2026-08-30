@@ -44,24 +44,18 @@ export function registerGetHotCommits(server: McpServer): void {
         limit ?? 10,
         componentLimit ?? 3,
         priorityLevel,
-      ).map((commit) => {
-        // Omit when empty — react-scan/lite live capture never populates this field;
-        // only the React DevTools manual-export path can report real updater names.
-        const { updaterComponentNames, ...rest } = commit;
-        return {
-          ...rest,
-          duration: formatMs(commit.duration),
-          totalSelfDuration: formatMs(commit.totalSelfDuration),
-          totalActualDuration: formatMs(commit.totalActualDuration),
-          topComponents: commit.topComponents.map((component) => ({
-            ...component,
-            actualDuration: formatMs(component.actualDuration),
-            selfDuration: formatMs(component.selfDuration),
-            shareOfCommitWork: formatPct(component.shareOfCommitWork),
-          })),
-          ...(updaterComponentNames.length > 0 ? { updaterComponentNames } : {}),
-        };
-      });
+      ).map((commit) => ({
+        ...commit,
+        duration: formatMs(commit.duration),
+        totalSelfDuration: formatMs(commit.totalSelfDuration),
+        totalActualDuration: formatMs(commit.totalActualDuration),
+        topComponents: commit.topComponents.map((component) => ({
+          ...component,
+          actualDuration: formatMs(component.actualDuration),
+          selfDuration: formatMs(component.selfDuration),
+          shareOfCommitWork: formatPct(component.shareOfCommitWork),
+        })),
+      }));
 
       return {
         content: [

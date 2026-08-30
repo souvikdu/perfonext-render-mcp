@@ -89,7 +89,8 @@ describe('render profile analysis', () => {
     expect(hotCommits[0].duration).toBeGreaterThanOrEqual(hotCommits[1].duration);
     expect(hotCommits[0].topComponents).toHaveLength(2);
     expect(hotCommits[0].topComponents[0].shareOfCommitWork).toBeGreaterThan(0);
-    expect(Array.isArray(hotCommits[0].updaterComponentNames)).toBe(true);
+    // Absent rather than empty when the capture source records no updaters
+    expect(hotCommits[0]).not.toHaveProperty('updaterComponentNames');
     expect(typeof hotCommits[0].interpretation).toBe('string');
     expect(hotCommits[0].interpretation.length).toBeGreaterThan(0);
   });
@@ -535,6 +536,27 @@ describe('getSlowComponents — internal filtering', () => {
     const slow = getSlowComponents(profile, 10);
     expect(slow.map((entry) => entry.componentName)).toEqual(['RealComponent']);
   });
+
+  it('does not spend ranked slots on components that cost nothing measurable', () => {
+    const profile = buildMultiComponentProfile([
+      buildComponent('FreeComponent', 0, [0]),
+      buildComponent('CheapComponent', 0.1, [0]),
+      buildComponent('RealComponent', 10, [0]),
+    ]);
+
+    const slow = getSlowComponents(profile, 10);
+    expect(slow.map((entry) => entry.componentName)).toEqual(['RealComponent', 'CheapComponent']);
+  });
+
+  it('filters on self duration, the metric the default sort ranks by', () => {
+    const profile = buildMultiComponentProfile([
+      buildComponent('Cheap', 1, [0]),
+      buildComponent('Expensive', 20, [0]),
+    ]);
+
+    const slow = getSlowComponents(profile, 10, 'total', 5);
+    expect(slow.map((entry) => entry.componentName)).toEqual(['Expensive']);
+  });
 });
 
 describe('getRenderSummary — minified-name detection', () => {
@@ -548,6 +570,19 @@ describe('getRenderSummary — minified-name detection', () => {
 
     const summary = getRenderSummary(profile);
     expect(summary.warnings.some((w) => w.includes('look minified'))).toBe(true);
+  });
+
+  it('tells the reader how to make the source field appear instead of assuming it is there', () => {
+    const profile = buildMultiComponentProfile([
+      buildComponent('O', 10, [0]),
+      buildComponent('P', 10, [0]),
+      buildComponent('R', 10, [0]),
+      buildComponent('LineChart', 10, [0]),
+    ]);
+
+    const warning = getRenderSummary(profile).warnings.find((w) => w.includes('look minified'))!;
+    expect(warning).toContain('includeFiberSource: true');
+    expect(warning).not.toContain('if present');
   });
 
   it('does not warn when component names look normal', () => {
