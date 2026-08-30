@@ -109,7 +109,8 @@ export interface HotCommitSummary {
   priorityLevel: string | null;
   measurementCount: number;
   topComponents: HotCommitComponentSummary[];
-  updaterComponentNames: string[];
+  /** Absent unless the capture source reports updaters — only React DevTools exports do. */
+  updaterComponentNames?: string[];
   interpretation: string;
 }
 

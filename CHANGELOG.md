@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-30
+
+### Changed
+
+- **BREAKING: `get_slow_components` renamed its `minDuration` input to `minSelfDuration`, and `get_rerender_causes` renamed its to `minActualDuration`.** Each tool ranks by a different metric, so a single shared name meant the same argument silently filtered on self time in one tool and actual time in the other. The names now match the metric each tool sorts by.
+- **BREAKING: `updaterComponentNames` is omitted when nothing was recorded** in `get_hot_commits` and `get_render_summary`, rather than being emitted as an empty array. An empty array reads as "nothing triggered this commit", which is never true of a commit that happened; the absent field correctly reads as "not recorded".
+- `get_slow_components` no longer spends ranked slots on components whose measured render cost is zero.
+- The minified-name warning now tells you how to fix it: re-run the capture with `includeFiberSource: true` to populate each entry's `source` field, so minified names can be mapped back to a file.
+
 ## [0.4.4] - 2026-08-29
 
 ### Fixed

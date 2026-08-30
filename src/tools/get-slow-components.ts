@@ -27,23 +27,23 @@ export function registerGetSlowComponents(server: McpServer): void {
           .describe(
             'Sort metric: "total" = total render time (default), "average" = average per render, "max" = peak single render time.',
           ),
-        minDuration: z
+        minSelfDuration: z
           .number()
           .nonnegative()
           .optional()
           .describe(
-            'Minimum total actual duration in ms to include. Filters sub-millisecond noise. Defaults to 0.',
+            'Minimum total self duration in ms to include — the same metric the default "total" sort ranks by, excluding time spent in children. Filters sub-millisecond noise. Defaults to 0.',
           ),
       },
     },
-    async ({ profileId, limit, sortBy, minDuration }) => {
+    async ({ profileId, limit, sortBy, minSelfDuration }) => {
       const profile = requireRenderProfile(profileId);
 
       const slowComponents = getSlowComponents(
         profile,
         limit ?? 10,
         sortBy ?? 'total',
-        minDuration ?? 0,
+        minSelfDuration ?? 0,
       ).map((component, index) => ({
         rank: index + 1,
         ...component,

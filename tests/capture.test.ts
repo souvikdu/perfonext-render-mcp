@@ -331,6 +331,83 @@ describe('ingest server — HTTP endpoint', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Ingest server — hardening of the locally exposed HTTP surface
+// ---------------------------------------------------------------------------
+
+describe('ingest server — request hardening', () => {
+  it('rejects origins that merely embed a loopback hostname', async () => {
+    await createCaptureSession();
+    const port = getServerPort();
+
+    for (const origin of [
+      'http://localhost.evil.example',
+      'http://127.0.0.1.evil.example',
+      'http://evil.example/?x=http://localhost',
+      'null',
+    ]) {
+      const res = await fetch(`http://127.0.0.1:${port}/ingest/any`, {
+        method: 'OPTIONS',
+        headers: { Origin: origin },
+      });
+      expect(res.headers.get('access-control-allow-origin')).toBeNull();
+    }
+  });
+
+  it('accepts only POST on a valid ingest path', async () => {
+    const session = await createCaptureSession();
+    const port = getServerPort();
+
+    for (const method of ['GET', 'PUT', 'DELETE', 'PATCH']) {
+      const res = await fetch(`http://127.0.0.1:${port}/ingest/${session.sessionId}`, { method });
+      expect(res.status).toBe(404);
+    }
+  });
+
+  it('does not route paths outside the single ingest route', async () => {
+    const session = await createCaptureSession();
+    const port = getServerPort();
+
+    for (const path of [
+      '/',
+      '/ingest',
+      `/ingest/${session.sessionId}/extra`,
+      `/ingest/${session.sessionId}%2Fextra`,
+      '/../../etc/passwd',
+    ]) {
+      const res = await fetch(`http://127.0.0.1:${port}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '[]',
+      });
+      expect(res.status).toBe(404);
+    }
+  });
+
+  it('attributes commits to the session in the URL, never the one claimed in the body', async () => {
+    const target = await createCaptureSession();
+    const other = await createCaptureSession();
+
+    const res = await postEvents(target.sessionId, [
+      makeCommit({ sessionId: other.sessionId, timestamp: 1 }),
+    ]);
+    expect(res.status).toBe(200);
+
+    expect(getCaptureSession(target.sessionId)?.commits).toHaveLength(1);
+    expect(getCaptureSession(target.sessionId)?.commits[0].sessionId).toBe(target.sessionId);
+    expect(getCaptureSession(other.sessionId)?.commits).toHaveLength(0);
+  });
+
+  it('refuses further events once a session is stopped', async () => {
+    const session = await createCaptureSession();
+    stopCaptureSession(session.sessionId);
+
+    const res = await postEvents(session.sessionId, [makeCommit({ timestamp: 1 })]);
+    expect(res.status).toBe(410);
+    expect(getCaptureSession(session.sessionId)?.commits).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // react-scan-lite adapter — tested through the full HTTP → session → adapt path
 // ---------------------------------------------------------------------------
 
