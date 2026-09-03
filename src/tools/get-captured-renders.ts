@@ -14,7 +14,7 @@ export function registerGetCapturedRenders(server: McpServer): void {
         'count (non-zero = instrumentation may not be wired correctly). ' +
         'Only call this if something seems wrong — it is not a required step before stop_render_capture.',
       inputSchema: {
-        sessionId: z.string().describe('The sessionId returned by start_render_capture'),
+        sessionId: z.string().describe('The sessionId returned by begin_render_analysis'),
       },
     },
     async ({ sessionId }) => {

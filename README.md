@@ -143,11 +143,11 @@ Capabilities:
 
 ### Live capture
 
-| Tool                   | Description                                                                                                                                                                                                                                                              |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `run_render_capture`   | Called after instrumentation is wired up. Accepts `method: "manual-interaction" \| "test-suite"`. Returns focused instructions for whichever method the user picks. Test suites must run **headed** (e.g. `playwright test --headed`) so React profiling hooks activate. |
-| `stop_render_capture`  | Stop the session, finalize buffered events into a profile, and return a `profileId` plus `dataQuality` (`exact` \| `heuristic`) for analysis                                                                                                                             |
-| `get_captured_renders` | Optional diagnostic: peek at session progress without stopping (commit count, unknown events). Only call if something seems wrong.                                                                                                                                       |
+| Tool                   | Description                                                                                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run_render_capture`   | Called after instrumentation is wired up. Accepts `method: "manual-interaction" \| "test-suite"`. Returns focused instructions for whichever method the user picks. |
+| `stop_render_capture`  | Stop the session, finalize buffered events into a profile, and return a `profileId` plus `dataQuality` (`exact` \| `heuristic`) for analysis                        |
+| `get_captured_renders` | Optional diagnostic: peek at session progress without stopping (commit count, unknown events). Only call if something seems wrong.                                  |
 
 ### Analysis
 
@@ -177,9 +177,9 @@ Your MCP client will:
 5. Ask whether you want to interact manually or run a test suite (`run_render_capture`)
 6. Stop the session and run analysis
 
-> Running a test suite? Launch it **headed** (e.g. `playwright test --headed`). A headless browser does not
-> expose the React DevTools profiling channel, so `changeDescription` data is unavailable and causes fall back
-> to heuristics (`dataQuality: "heuristic"`).
+> Running a test suite? Use `npx playwright test` as usual. `react-scan/lite` installs
+> `__REACT_DEVTOOLS_GLOBAL_HOOK__` itself, so a visible window and the React DevTools extension are not
+> required. The run still yields `changeDescription` data and `dataQuality: "exact"`.
 
 > **Two preconditions commonly cause a silent `commitCount: 0`:**
 >
