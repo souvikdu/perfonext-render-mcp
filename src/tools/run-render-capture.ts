@@ -66,8 +66,9 @@ export function registerRunRenderCapture(server: McpServer): void {
         instructions: [
           '1. Start the dev server if not already running (e.g. `npm run dev`).',
           '2. Inspect the project to find available Playwright test files. Pick one relevant to what you want to profile.',
-          '3. Run the test suite with the --headed flag:',
-          '   npx playwright test <test-file> --headed',
+          '3. Run the test suite:',
+          '   npx playwright test <test-file>',
+          '   A visible window is not required: react-scan/lite installs the profiling hook itself.',
           '4. When the test run finishes, call stop_render_capture to end the session.',
         ].join('\n'),
         nextStep: `stop_render_capture({ sessionId: "${sessionId}" })`,

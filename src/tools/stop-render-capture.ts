@@ -17,7 +17,7 @@ export function registerStopRenderCapture(server: McpServer): void {
         'and return a profileId you can use with get_render_summary, get_slow_components, ' +
         'get_rerender_causes, and compare_renders.',
       inputSchema: {
-        sessionId: z.string().describe('The sessionId returned by start_render_capture'),
+        sessionId: z.string().describe('The sessionId returned by begin_render_analysis'),
       },
     },
     async ({ sessionId }) => {
@@ -69,7 +69,17 @@ export function registerStopRenderCapture(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify({ warning, sessionId, commitCount: 0 }, null, 2),
+              text: JSON.stringify(
+                {
+                  warning,
+                  sessionId,
+                  commitCount: 0,
+                  nextStep:
+                    'Do not call stop_render_capture again. Fix the named prerequisite, then start a new begin_render_analysis session.',
+                },
+                null,
+                2,
+              ),
             },
           ],
         };

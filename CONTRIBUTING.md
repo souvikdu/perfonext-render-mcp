@@ -60,8 +60,8 @@ tests/
   tools interactively.
 - Or add the server to VS Code (`.vscode/mcp.json`, see the README) and drive it from
   Copilot Chat.
-- Live capture needs a headed Chromium (React profiling hooks are not installed in headless
-  Chromium).
+- Live capture works in headless Chromium; `react-scan/lite` installs the profiling hook itself.
+  It does need a React profiling build (`next dev`, or `next build --profile`).
 
 ## Pull requests
 

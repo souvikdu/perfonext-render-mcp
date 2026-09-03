@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-03
+
+### Fixed
+
+- `run_render_capture` no longer mentions `--headed`. Test-suite instructions are `npx playwright test <test-file>` (Playwright's default is already headless). `react-scan/lite` installs `__REACT_DEVTOOLS_GLOBAL_HOOK__` itself, so a visible window is not required and the run still reports `profilingAvailable: true`, `changeDescription`, and `dataQuality: "exact"`.
+- `stop_render_capture` and `get_captured_renders` now name `begin_render_analysis` as the session entry point instead of the retired `start_render_capture`.
+- A zero-commit stop no longer tells the agent to call `stop_render_capture` again. It names the failed prerequisite and points at a new `begin_render_analysis` session.
+- `begin_render_analysis` returns a structured error when the ingest port is already in use instead of throwing.
+- `load_render_profile` reports missing, directory, and malformed-file errors in the same shape as the profiler server.
+
 ## [0.5.0] - 2026-08-30
 
 ### Changed

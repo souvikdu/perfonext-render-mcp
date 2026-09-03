@@ -24,7 +24,21 @@ export function registerBeginRenderAnalysis(server: McpServer): void {
     },
     async ({ approach }) => {
       if (approach === 'live') {
-        const session = await createCaptureSession();
+        let session: Awaited<ReturnType<typeof createCaptureSession>>;
+        try {
+          session = await createCaptureSession();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({ error: message }, null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
 
         const snippet = [
           `import { instrument } from "react-scan/lite";`,
