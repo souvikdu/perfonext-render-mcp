@@ -1,6 +1,6 @@
 {
   "name": "@perfonext/render-mcp",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "mcpName": "io.github.souvikdu/perfonext-render-mcp",
   "description": "MCP server for analyzing Next.js React Profiler exports: render summaries, rerender causes, hot commits, and profile diffing",
   "type": "module",
@@ -47,7 +47,7 @@
   "bugs": {
     "url": "https://github.com/souvikdu/perfonext-render-mcp/issues"
   },
-  "homepage": "https://github.com/souvikdu/perfonext-render-mcp#readme",
+  "homepage": "https://perfonext.github.io/",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
